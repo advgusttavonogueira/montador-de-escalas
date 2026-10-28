@@ -44,6 +44,10 @@ input,select,textarea{font:inherit;font-size:14px;color:var(--ink);background:va
 textarea{resize:vertical;min-height:70px}
 input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,.day input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.xrow{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.xrow input,.xrow select{background:var(--surface)}
+.xrow button{padding:8px 10px;font-size:13px}
+@media (max-width:420px){.xrow{grid-template-columns:1fr 1fr}.xrow label:first-child{grid-column:1/-1}}
 .hint{font-size:12px;color:var(--muted);font-weight:400;margin:0}
 .days{display:flex;flex-wrap:wrap;gap:6px}
 .day{position:relative}
@@ -153,6 +157,12 @@ footer .fine{flex-basis:100%;max-width:90ch}
             <option value="15">15 minutos</option><option value="30">30 minutos</option><option value="45">45 minutos</option>
             <option value="60" selected>1 hora</option><option value="80">1h20</option><option value="90">1h30</option><option value="120">2 horas</option>
           </select></label>
+          <div style="display:grid;gap:8px">
+            <label style="margin:0">Pausas adicionais</label>
+            <p class="hint" style="margin-top:-4px">Pausas que a empresa concede além do intervalo, como o café. Informe a duração e a faixa de horário em que podem acontecer.</p>
+            <div id="extras" style="display:grid;gap:8px"></div>
+            <div><button type="button" id="addExtra">Adicionar pausa</button></div>
+          </div>
           <label for="nomes">Nomes (opcional, um por linha)<textarea id="nomes" rows="3" placeholder="Se deixar em branco, usamos Funcionário 1, 2, 3..."></textarea></label>
         </div>
         <div class="sec">
@@ -227,7 +237,8 @@ function read(){
   const names=$("nomes").value.split("\n").map(s=>s.trim()).filter(Boolean);
   return {empresa:$("empresa").value.trim(),cargo:$("cargo").value.trim()||"Cargo",funcao:$("funcao").value.trim(),
     wd,wh,open,allow,N,a:tm($("ini").value||"08:00"),b:tm($("fim").value||"17:00"),minp:Math.max(1,parseInt($("minp").value)||1),
-    I:parseInt($("intv").value),domH:parseInt($("domH").value),mulheres:Math.max(0,parseInt($("mulheres").value)||0),names,start:$("inicio").value};
+    I:parseInt($("intv").value),domH:parseInt($("domH").value),mulheres:Math.max(0,parseInt($("mulheres").value)||0),names,start:$("inicio").value,
+    extras:[...document.querySelectorAll(".xrow")].map(r=>({dur:parseInt(r.querySelector(".xd").value)||10,ws:tm(r.querySelector(".xs").value||"15:00"),we:tm(r.querySelector(".xe").value||"17:00")})).filter(x=>x.we-x.ws>=x.dur)};
 }
 
 function solve(c){
@@ -300,11 +311,13 @@ function solve(c){
   // horários e intervalos
   const sh=types.map(t=>({s:starts[t],e:starts[t]+S}));
   const brk=new Array(c.N).fill(null);
+  const xb=[...Array(c.N)].map(()=>[]);
   function covDay(d,upto){ // retorna vetor de cobertura na janela
     const v=new Array(L).fill(0);
     for(let e=0;e<c.N;e++){if(!R[e][d])continue;
       for(let x=Math.max(sh[e].s,c.a);x<Math.min(sh[e].e,c.b);x++)v[x-c.a]++;
-      if(brk[e]!=null&&(upto==null||upto.includes(e)))for(let x=Math.max(brk[e],c.a);x<Math.min(brk[e]+I,c.b);x++)v[x-c.a]--;}
+      if(brk[e]!=null&&(upto==null||upto.includes(e)))for(let x=Math.max(brk[e],c.a);x<Math.min(brk[e]+I,c.b);x++)v[x-c.a]--;
+      for(const p of xb[e])if(p)for(let x=Math.max(p.t,c.a);x<Math.min(p.t+p.d,c.b);x++)v[x-c.a]--;}
     return v}
   function deficit(placed){let p=0;for(let d=0;d<ND;d++){if(!isOpen(d))continue;const v=covDay(d,placed);for(const x of v)if(x<c.minp)p+=c.minp-x}return p}
   if(I>0){
@@ -333,6 +346,19 @@ function solve(c){
     }
   }
   const all=[...Array(c.N).keys()];
+  let xNoFit=0;
+  c.extras.forEach((X,k)=>{
+    const order=[...Array(c.N).keys()].sort((x,y)=>sh[x].s-sh[y].s||x-y);
+    for(const e of order){
+      const busy=[];if(brk[e]!=null)busy.push([brk[e],brk[e]+I]);for(const p of xb[e])if(p)busy.push([p.t,p.t+p.d]);
+      const lo=Math.max(X.ws,sh[e].s+30),hi=Math.min(X.we,sh[e].e-30)-X.dur;
+      let bt=null,bv=Infinity;const mid=(X.ws+X.we-X.dur)/2;
+      for(let t=lo;t<=hi;t+=5){if(busy.some(([a,b])=>t<b+15&&a<t+X.dur+15))continue;
+        xb[e][k]={t,d:X.dur};
+        let ov=0;for(let o=0;o<c.N;o++){if(o===e)continue;const bs=[];if(brk[o]!=null)bs.push([brk[o],brk[o]+I]);for(const p of xb[o])if(p)bs.push([p.t,p.t+p.d]);if(bs.some(([a,b])=>t<b&&a<t+X.dur))ov++}
+        const v=deficit(all)*1000+ov*20+Math.abs(t-mid)/10;if(v<bv){bv=v;bt=t}}
+      if(bt==null){xb[e][k]=null;xNoFit++}else xb[e][k]={t:bt,d:X.dur};
+    }});
   const minDay=[],cntDay=[];
   for(let d=0;d<ND;d++){cntDay.push(R.reduce((a,row)=>a+(row[d]?1:0),0));
     if(!isOpen(d)){minDay.push(null);continue}const v=covDay(d,all);minDay.push(L>0?Math.min(...v):0)}
@@ -344,7 +370,7 @@ function solve(c){
   const perDay=r.reduce((a,b)=>a+b,0);
   const needN=Math.ceil(perDay*c.open.length/Math.max(1,Math.min(c.wd,c.open.length)));
   if(short===0)chk.push(["ok",`Cobertura garantida: em todos os dias de funcionamento há pelo menos ${c.minp} ${c.minp>1?"pessoas":"pessoa"} no posto das ${hm(c.a)} às ${hm(c.b)}, inclusive nos intervalos.`]);
-  else chk.push(["bad",`Em ${short} ${short>1?"dias":"dia"} do ciclo a cobertura fica abaixo do mínimo em algum momento. Com esses parâmetros, a estimativa é de pelo menos ${Math.max(needN,c.N+1)} funcionários, ou libere mais dias de folga.`]);
+  else chk.push(["bad",`Em ${short} ${short>1?"dias":"dia"} do ciclo a cobertura fica abaixo do mínimo em algum momento. Com esses parâmetros, a estimativa é de pelo menos ${Math.max(needN,c.N+1)} funcionários, ou libere mais dias de folga.${c.extras.length?" As pausas adicionais também pesam: tente ampliar a faixa de horário delas.":""}`]);
   const comp=D>480?D-480:0;
   if(D>600)chk.push(["bad",`Jornada diária de ${dur(D)}: passa do limite de 10 horas (art. 59, §2º, CLT).`]);
   else if(comp)chk.push(["warn",`Jornada de ${dur(D)} por dia: são ${dur(comp)} diários além de 8 horas, compensados dentro da própria semana, que fecha em ${c.wh} horas com duas folgas, sem hora extra. Exige acordo de compensação por escrito, de preferência previsto em acordo ou convenção coletiva, como prevê a EC 141/2026 (art. 7º, XIII, CF; art. 59, §2º, CLT; Súmula 85 do TST). Sem esse acordo, os ${dur(comp)} diários são horas extras.`]);
@@ -366,13 +392,16 @@ function solve(c){
       else chk.push(["ok",`${nm>1?"Os "+nm+" homens folgam":"O homem da equipe folga"} um domingo a cada ${c.domH} semanas, o que atende também à regra do comércio (Lei 10.101/2000, art. 6º, parágrafo único).`]);}
     chk.push(["warn","Trabalho aos domingos e feriados depende da convenção coletiva da categoria e da lei municipal. Feriados não estão na escala."]);
   }
+  if(c.extras.length){const tot=c.extras.reduce((a,x)=>a+x.dur,0);
+    chk.push(["ok",`Pausas adicionais de ${dur(tot)} por dia: por não estarem previstas em lei, contam como tempo de serviço (Súmula 118 do TST). Ficam dentro da jornada, sem desconto e sem mudar entrada e saída. Se forem somadas ao fim do expediente, o tempo acrescido é hora extra.`]);
+    if(xNoFit)chk.push(["warn",`Em ${xNoFit} ${xNoFit>1?"casos":"caso"} a pausa adicional não coube na faixa de horário informada, por estar fora do turno ou colada no intervalo. Amplie a faixa de horário.`]);}
   if(sh.some(x=>x.e>1320||x.s<300))chk.push(["warn","Parte da jornada cai entre 22h e 5h: há adicional noturno e hora noturna reduzida (art. 73, CLT)."]);
   if(S>780)chk.push(["bad","O intervalo entre uma jornada e outra fica abaixo de 11 horas (art. 66, CLT)."]);
   const extras=choice.reduce((a,ch,e)=>a+ch.reduce((b,x,w)=>b+opts[e][w][x].x,0),0);
   if(extras)chk.push(["warn",`Para que ninguém passe de 6 dias seguidos com o revezamento de domingos, ${extras} ${extras>1?"semanas do ciclo têm":"semana do ciclo tem"} uma folga a mais. Nessas semanas a carga fica abaixo de ${c.wh}h, sem prejuízo do salário contratado.`]);
   if(shortAllowed)chk.push(["warn","Os dias de folga marcados não bastam para dar todas as folgas da semana. A escala usou outros dias em que a empresa abre."]);
   if(fewerDays)chk.push(["warn",`A empresa fecha mais dias do que as folgas do regime ${c.wd===5?"5x2":"6x1"}. Nesses casos a semana tem menos dias de trabalho e menos horas.`]);
-  return {sunOpen,per,fem,D,I,S,L,m,starts,types,sh,brk,R,W,ND,isOpen,minDay,cntDay,hoursWeek,chk,maxCons};
+  return {xb,xNoFit,sunOpen,per,fem,D,I,S,L,m,starts,types,sh,brk,R,W,ND,isOpen,minDay,cntDay,hoursWeek,chk,maxCons};
 }
 
 let last=null,lastC=null;
@@ -405,8 +434,8 @@ function render(){
   h+=`<td></td></tr></tfoot></table></div>
   <div class="legend" style="margin-top:8px"><span><span class="sw" style="background:var(--surface)"></span>${s.m>1?"Letra = turno do dia":"T = trabalho"}</span><span><span class="sw" style="background:var(--sand-soft)"></span>F = folga</span><span><span class="sw" style="background:var(--soft)"></span>Empresa fechada ou domingo</span><span>A escala se repete a cada ${s.W} semanas.</span></div></div>`;
   // horários + checagens
-  h+=`<div class="two"><div class="panel"><h3>Horários</h3><table class="hor"><thead><tr><th>Funcionário</th>${s.m>1?"<th>Turno</th>":""}<th>Entrada</th><th>Intervalo</th><th>Saída</th>${s.sunOpen?"<th>Domingo de folga</th>":""}</tr></thead><tbody>`;
-  for(let e=0;e<c.N;e++){const x=s.sh[e];h+=`<tr><td>${esc(name(c,e))}</td>${s.m>1?`<td class="t">${letters[s.types[e]]}</td>`:""}<td>${hm(x.s)}</td><td>${s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo"}</td><td>${hm(x.e)}</td>${s.sunOpen?`<td>${s.per[e]===2?"A cada 2 semanas":s.per[e]===3?"A cada 3 semanas":"A cada 4 semanas"}${s.fem[e]?" (mulher)":""}</td>`:""}</tr>`}
+  h+=`<div class="two"><div class="panel"><h3>Horários</h3><table class="hor"><thead><tr><th>Funcionário</th>${s.m>1?"<th>Turno</th>":""}<th>Entrada</th><th>Intervalo</th>${c.extras.length?"<th>Pausas</th>":""}<th>Saída</th>${s.sunOpen?"<th>Domingo de folga</th>":""}</tr></thead><tbody>`;
+  for(let e=0;e<c.N;e++){const x=s.sh[e];h+=`<tr><td>${esc(name(c,e))}</td>${s.m>1?`<td class="t">${letters[s.types[e]]}</td>`:""}<td>${hm(x.s)}</td><td>${s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo"}</td>${c.extras.length?`<td>${xtxt(s,e)}</td>`:""}<td>${hm(x.e)}</td>${s.sunOpen?`<td>${s.per[e]===2?"A cada 2 semanas":s.per[e]===3?"A cada 3 semanas":"A cada 4 semanas"}${s.fem[e]?" (mulher)":""}</td>`:""}</tr>`}
   h+=`</tbody></table></div><div class="panel"><h3>Conferência legal</h3><ul class="checks">${s.chk.map(x=>`<li class="${x[0]}">${x[1]}</li>`).join("")}</ul></div></div>`;
 
   $("out").innerHTML=h;
@@ -470,9 +499,9 @@ async function exportPDF(){
   if(y>PH-60){doc.addPage();chrome();y=30}
   const colW=128;
   doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...NAVY);doc.text("Horários",M,y);doc.text("Conferência legal",M+colW+12,y);
-  const hb=[];for(let e=0;e<c.N;e++){const x=s.sh[e];hb.push([name(c,e)].concat(s.m>1?[letters[s.types[e]]]:[]).concat([hm(x.s),s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo",hm(x.e)]).concat(s.sunOpen?["A cada "+s.per[e]+" sem."+(s.fem[e]?" (mulher)":"")]:[]))}
+  const hb=[];for(let e=0;e<c.N;e++){const x=s.sh[e];hb.push([name(c,e)].concat(s.m>1?[letters[s.types[e]]]:[]).concat([hm(x.s),s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo"]).concat(c.extras.length?[xtxt(s,e)]:[]).concat([hm(x.e)]).concat(s.sunOpen?["A cada "+s.per[e]+" sem."+(s.fem[e]?" (mulher)":"")]:[]))}
   const startPage=doc.internal.getCurrentPageInfo().pageNumber;
-  doc.autoTable({startY:y+2,head:[["Funcionário"].concat(s.m>1?["Turno"]:[]).concat(["Entrada","Intervalo","Saída"]).concat(s.sunOpen?["Domingo de folga"]:[])],body:hb,theme:"plain",
+  doc.autoTable({startY:y+2,head:[["Funcionário"].concat(s.m>1?["Turno"]:[]).concat(["Entrada","Intervalo"]).concat(c.extras.length?["Pausas"]:[]).concat(["Saída"]).concat(s.sunOpen?["Domingo de folga"]:[])],body:hb,theme:"plain",
     margin:{left:M,right:PW-M-colW,top:26,bottom:14},tableWidth:colW,
     styles:{font:"helvetica",fontSize:8,cellPadding:1.6,lineColor:LN,lineWidth:{bottom:.2},textColor:[35,40,63]},
     headStyles:{textColor:GR,fontSize:7,lineColor:NAVY,lineWidth:{bottom:.5}},didDrawPage:()=>{if(doc.internal.getCurrentPageInfo().pageNumber>startPage)chrome()}});
@@ -495,12 +524,13 @@ async function exportPDF(){
   if(dl){try{await dl.save({filename:fname,data:blob});t.textContent="PDF pronto."}catch(e){t.textContent=e&&e.code==="declined"?"Download cancelado.":"Não foi possível salvar o PDF aqui."}}
   else{doc.save(fname);t.textContent="PDF baixado."}
 }
+function xtxt(s,e){return s.xb[e].map(p=>p?hm(p.t)+" às "+hm(p.t+p.d):"não coube").join(", ")||""}
 function fmtH(x){const m=Math.round(x*60),h=Math.floor(m/60),mi=m%60;return h+"h"+(mi?String(mi).padStart(2,"0"):"")}
 function esc(t){return t.replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]))}
 function copyTSV(){
   const c=lastC,s=last;const rows=[];
-  rows.push(["Funcionário","Entrada","Intervalo","Saída"].concat([...Array(s.ND).keys()].map(d=>`S${Math.floor(d/7)+1} ${DN[d%7]}`)));
-  for(let e=0;e<c.N;e++){const x=s.sh[e];rows.push([name(c,e),hm(x.s),s.brk[e]!=null?hm(s.brk[e])+"-"+hm(s.brk[e]+s.I):"",hm(x.e)].concat(s.R[e].map((w,d)=>!s.isOpen(d)?"F":w?(s.m>1?"ABCDEFGH"[s.types[e]]:"T"):"F")))}
+  rows.push(["Funcionário","Entrada","Intervalo","Pausas","Saída"].concat([...Array(s.ND).keys()].map(d=>`S${Math.floor(d/7)+1} ${DN[d%7]}`)));
+  for(let e=0;e<c.N;e++){const x=s.sh[e];rows.push([name(c,e),hm(x.s),s.brk[e]!=null?hm(s.brk[e])+"-"+hm(s.brk[e]+s.I):"",xtxt(s,e),hm(x.e)].concat(s.R[e].map((w,d)=>!s.isOpen(d)?"F":w?(s.m>1?"ABCDEFGH"[s.types[e]]:"T"):"F")))}
   const txt=rows.map(r=>r.join("\t")).join("\n");const t=$("toast");
   const fb=()=>{const ta=document.createElement("textarea");ta.value=txt;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");t.textContent="Copiado. Cole no Excel."}catch(e){t.textContent="Não foi possível copiar."}ta.remove()};
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(()=>{t.textContent="Copiado. Cole no Excel ou no Google Planilhas."},fb);else fb();
@@ -509,6 +539,15 @@ let touched=false;
 $("f").addEventListener("submit",e=>{e.preventDefault();render()});
 $("f").addEventListener("change",e=>{if(e.target.id.startsWith("open"))syncOff();if(!touched){touched=true;$("exBox").hidden=true}render()});
 $("again").onclick=()=>{seed=(seed*7919+13)%100003;render()};
+function addExtra(d,ws,we){const box=$("extras");if(box.children.length>=3)return;const i=Date.now()%100000+box.children.length;
+  const r=document.createElement("div");r.className="xrow";
+  r.innerHTML=`<label for="xd${i}">Duração<select class="xd" id="xd${i}">${[5,10,15,20,30].map(m=>`<option value="${m}" ${m===d?"selected":""}>${m} min</option>`).join("")}</select></label>
+  <label for="xs${i}">Entre<input type="time" class="xs" id="xs${i}" value="${ws}"></label>
+  <label for="xe${i}">e<input type="time" class="xe" id="xe${i}" value="${we}"></label>
+  <button type="button" aria-label="Remover pausa" class="xrm">Remover</button>`;
+  r.querySelector(".xrm").onclick=()=>{r.remove();$("addExtra").hidden=false;render()};
+  box.appendChild(r);$("addExtra").hidden=box.children.length>=3;}
+$("addExtra").onclick=()=>{const n=$("extras").children.length;addExtra(n?10:15,n?"16:30":"15:00",n?"18:00":"17:00");render()};
 $("copy").onclick=copyTSV;$("pdf").onclick=exportPDF;
 syncOff();render();
 })();

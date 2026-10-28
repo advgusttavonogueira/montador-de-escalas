@@ -12,7 +12,7 @@ O empregador informa:
 - dias de funcionamento e o horário que precisa ficar coberto;
 - quantas pessoas devem estar no posto ao mesmo tempo;
 - número de funcionários, regime (5x2 ou 6x1) e carga semanal, incluindo 5x2 de 42 horas com compensação, para a fase de transição da EC 141/2026;
-- duração do intervalo;
+- duração do intervalo e, se houver, pausas adicionais (como o café), com a duração e a faixa de horário em que podem acontecer;
 - dias da semana em que pode dar folga e, se abrir aos domingos, quantas são mulheres (folga dominical a cada 2 semanas, art. 386 da CLT) e a regra dos homens (pelo menos um domingo por mês, ou a cada 3 semanas no comércio).
 
 E recebe, na hora:
