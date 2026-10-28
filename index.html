@@ -159,11 +159,15 @@ footer .fine{flex-basis:100%;max-width:90ch}
           <h2>Folgas</h2>
           <div><label style="margin-bottom:6px">Dias da semana em que pode dar folga</label><div class="days" id="offDays"></div>
           <p class="hint" style="margin-top:6px">Dias em que a empresa fecha já contam como folga.</p></div>
-          <label for="domRule" id="domWrap">Folga aos domingos<select id="domRule">
-            <option value="2" selected>Um domingo a cada 2 semanas (recomendado)</option>
-            <option value="3">Um domingo a cada 3 semanas</option>
-            <option value="4">Um domingo por mês</option>
-          </select></label>
+          <div id="domWrap" style="display:grid;gap:10px">
+            <label for="mulheres">Quantas são mulheres<input type="number" id="mulheres" min="0" max="40" value="4"></label>
+            <p class="hint" style="margin-top:-4px">Mulheres folgam um domingo a cada 2 semanas (art. 386 da CLT). Se informar nomes, as primeiras da lista são consideradas mulheres.</p>
+            <label for="domH">Homens: folga aos domingos<select id="domH">
+              <option value="4" selected>Pelo menos um domingo por mês</option>
+              <option value="3">Um domingo a cada 3 semanas (comércio)</option>
+              <option value="2">Um domingo a cada 2 semanas</option>
+            </select></label>
+          </div>
           <label for="inicio">Primeira segunda-feira da escala<input type="date" id="inicio"></label>
         </div>
         <div class="btns" style="padding-top:6px">
@@ -223,7 +227,7 @@ function read(){
   const names=$("nomes").value.split("\n").map(s=>s.trim()).filter(Boolean);
   return {empresa:$("empresa").value.trim(),cargo:$("cargo").value.trim()||"Cargo",funcao:$("funcao").value.trim(),
     wd,wh,open,allow,N,a:tm($("ini").value||"08:00"),b:tm($("fim").value||"17:00"),minp:Math.max(1,parseInt($("minp").value)||1),
-    I:parseInt($("intv").value),dom:parseInt($("domRule").value),names,start:$("inicio").value};
+    I:parseInt($("intv").value),domH:parseInt($("domH").value),mulheres:Math.max(0,parseInt($("mulheres").value)||0),names,start:$("inicio").value};
 }
 
 function solve(c){
@@ -241,7 +245,17 @@ function solve(c){
   const types=[...Array(c.N).keys()].map(e=>e%m);
   const idxInType=types.map((t,e)=>types.slice(0,e).filter(x=>x===t).length);
   const sunOpen=c.open.includes(6);
-  const W=sunOpen?(c.dom===3?3:4):4, ND=W*7;
+  const fem=[...Array(c.N).keys()].map(e=>e<Math.min(c.mulheres,c.N));
+  const per=fem.map(f=>f?2:c.domH);
+  const pidx=new Array(c.N).fill(0);
+  const lcm=(a,b)=>{const g=(x,y)=>y?g(y,x%y):x;return a*b/g(a,b)};
+  const W=sunOpen?[...new Set(per)].reduce((a,p)=>lcm(a,p),1)*(per.every(p=>p===2)?2:1):4, ND=W*7;
+  if(sunOpen){const offT=types.map(()=>new Array(W).fill(0)),offAll=new Array(W).fill(0);
+    const ord=[...Array(c.N).keys()].sort((x,y)=>per[x]-per[y]||x-y);
+    for(const e of ord){let bo=0,bv=Infinity;
+      for(let o=0;o<per[e];o++){const ws=[];for(let w=0;w<W;w++)if((w+o)%per[e]===0)ws.push(w);
+        const v=Math.max(...ws.map(w=>offT[types[e]][w]+1))*100+Math.max(...ws.map(w=>offAll[w]+1));if(v<bv){bv=v;bo=o}}
+      pidx[e]=bo;for(let w=0;w<W;w++)if((w+bo)%per[e]===0){offT[types[e]][w]++;offAll[w]++}}}
   const isOpen=d=>c.open.includes(d%7);
   const off=7-c.wd;
   // opções de folga por funcionário/semana
@@ -250,7 +264,7 @@ function solve(c){
   for(let e=0;e<c.N;e++){opts.push([]);forced.push([]);
     for(let w=0;w<W;w++){
       const f=[];for(let d=0;d<7;d++)if(!c.open.includes(d))f.push(d);
-      if(sunOpen&&((w+idxInType[e])%c.dom===0))f.push(6);
+      if(sunOpen&&((w+pidx[e])%per[e]===0))f.push(6);
       let k=off-f.length; if(k<0){fewerDays=true;k=0}
       let pool=c.allow.slice(); if(pool.length<k){shortAllowed=true;pool=c.open.filter(d=>d!==6)}
       if(pool.length<k){k=pool.length;}
@@ -346,9 +360,10 @@ function solve(c){
   else chk.push(["ok","Jornada de até 4 horas: sem intervalo obrigatório."]);
   chk.push(maxCons<=6?["ok",`Ninguém trabalha mais de ${maxCons} dias seguidos. O descanso semanal ocorre dentro de cada período de 7 dias (OJ 410 da SDI-1 do TST).`]:["bad",`Há sequência de ${maxCons} dias de trabalho: o repouso semanal não pode passar do sétimo dia (OJ 410 da SDI-1 do TST).`]);
   if(sunOpen){
-    if(c.dom===2)chk.push(["ok","Folga dominical a cada 2 semanas: atende ao art. 386 da CLT (revezamento quinzenal para mulheres) e à Lei 10.101/2000."]);
-    else if(c.dom===3)chk.push(["warn","Folga dominical a cada 3 semanas: atende à Lei 10.101/2000 (art. 6º, parágrafo único) no comércio, mas para mulheres o art. 386 da CLT exige revezamento quinzenal."]);
-    else chk.push(["bad","Um domingo por mês fica abaixo do mínimo legal: no comércio, a Lei 10.101/2000 exige folga no domingo ao menos a cada 3 semanas, e para mulheres o art. 386 da CLT exige a cada 2 semanas."]);
+    const nf=fem.filter(Boolean).length,nm=c.N-nf;
+    if(nf)chk.push(["ok",`${nf>1?"As "+nf+" mulheres folgam":"A mulher da equipe folga"} um domingo a cada 2 semanas, como exige o art. 386 da CLT.`]);
+    if(nm){if(c.domH===4)chk.push(["warn",`${nm>1?"Os "+nm+" homens folgam":"O homem da equipe folga"} um domingo a cada 4 semanas, ao menos uma vez por mês. Se a empresa for do comércio, a Lei 10.101/2000 (art. 6º, parágrafo único) exige folga no domingo ao menos a cada 3 semanas.`]);
+      else chk.push(["ok",`${nm>1?"Os "+nm+" homens folgam":"O homem da equipe folga"} um domingo a cada ${c.domH} semanas, o que atende também à regra do comércio (Lei 10.101/2000, art. 6º, parágrafo único).`]);}
     chk.push(["warn","Trabalho aos domingos e feriados depende da convenção coletiva da categoria e da lei municipal. Feriados não estão na escala."]);
   }
   if(sh.some(x=>x.e>1320||x.s<300))chk.push(["warn","Parte da jornada cai entre 22h e 5h: há adicional noturno e hora noturna reduzida (art. 73, CLT)."]);
@@ -357,7 +372,7 @@ function solve(c){
   if(extras)chk.push(["warn",`Para que ninguém passe de 6 dias seguidos com o revezamento de domingos, ${extras} ${extras>1?"semanas do ciclo têm":"semana do ciclo tem"} uma folga a mais. Nessas semanas a carga fica abaixo de ${c.wh}h, sem prejuízo do salário contratado.`]);
   if(shortAllowed)chk.push(["warn","Os dias de folga marcados não bastam para dar todas as folgas da semana. A escala usou outros dias em que a empresa abre."]);
   if(fewerDays)chk.push(["warn",`A empresa fecha mais dias do que as folgas do regime ${c.wd===5?"5x2":"6x1"}. Nesses casos a semana tem menos dias de trabalho e menos horas.`]);
-  return {D,I,S,L,m,starts,types,sh,brk,R,W,ND,isOpen,minDay,cntDay,hoursWeek,chk,maxCons};
+  return {sunOpen,per,fem,D,I,S,L,m,starts,types,sh,brk,R,W,ND,isOpen,minDay,cntDay,hoursWeek,chk,maxCons};
 }
 
 let last=null,lastC=null;
@@ -390,8 +405,8 @@ function render(){
   h+=`<td></td></tr></tfoot></table></div>
   <div class="legend" style="margin-top:8px"><span><span class="sw" style="background:var(--surface)"></span>${s.m>1?"Letra = turno do dia":"T = trabalho"}</span><span><span class="sw" style="background:var(--sand-soft)"></span>F = folga</span><span><span class="sw" style="background:var(--soft)"></span>Empresa fechada ou domingo</span><span>A escala se repete a cada ${s.W} semanas.</span></div></div>`;
   // horários + checagens
-  h+=`<div class="two"><div class="panel"><h3>Horários</h3><table class="hor"><thead><tr><th>Funcionário</th>${s.m>1?"<th>Turno</th>":""}<th>Entrada</th><th>Intervalo</th><th>Saída</th></tr></thead><tbody>`;
-  for(let e=0;e<c.N;e++){const x=s.sh[e];h+=`<tr><td>${esc(name(c,e))}</td>${s.m>1?`<td class="t">${letters[s.types[e]]}</td>`:""}<td>${hm(x.s)}</td><td>${s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo"}</td><td>${hm(x.e)}</td></tr>`}
+  h+=`<div class="two"><div class="panel"><h3>Horários</h3><table class="hor"><thead><tr><th>Funcionário</th>${s.m>1?"<th>Turno</th>":""}<th>Entrada</th><th>Intervalo</th><th>Saída</th>${s.sunOpen?"<th>Domingo de folga</th>":""}</tr></thead><tbody>`;
+  for(let e=0;e<c.N;e++){const x=s.sh[e];h+=`<tr><td>${esc(name(c,e))}</td>${s.m>1?`<td class="t">${letters[s.types[e]]}</td>`:""}<td>${hm(x.s)}</td><td>${s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo"}</td><td>${hm(x.e)}</td>${s.sunOpen?`<td>${s.per[e]===2?"A cada 2 semanas":s.per[e]===3?"A cada 3 semanas":"A cada 4 semanas"}${s.fem[e]?" (mulher)":""}</td>`:""}</tr>`}
   h+=`</tbody></table></div><div class="panel"><h3>Conferência legal</h3><ul class="checks">${s.chk.map(x=>`<li class="${x[0]}">${x[1]}</li>`).join("")}</ul></div></div>`;
 
   $("out").innerHTML=h;
@@ -441,8 +456,8 @@ async function exportPDF(){
   const hrsW=s.hoursWeek.some(h=>!h.every(x=>x===h[0]))?40:20, nameW=32, dayW=(PW-2*M-nameW-hrsW)/s.ND;
   const cs={0:{cellWidth:nameW,halign:"left"}};for(let d=1;d<=s.ND;d++)cs[d]={cellWidth:dayW};cs[s.ND+1]={cellWidth:hrsW};
   doc.autoTable({startY:y+1,head:[head1,head2],body,foot,theme:"plain",margin:{left:M,right:M,top:26,bottom:14},
-    styles:{font:"helvetica",fontSize:7.5,halign:"center",valign:"middle",cellPadding:1.2,lineColor:LN,lineWidth:{bottom:.2}},
-    headStyles:{textColor:GR,fontStyle:"bold",fontSize:6.8},footStyles:{textColor:GR,fontStyle:"normal",fontSize:7},
+    styles:{font:"helvetica",fontSize:s.ND>28?6:7.5,halign:"center",valign:"middle",cellPadding:1.2,lineColor:LN,lineWidth:{bottom:.2}},
+    headStyles:{textColor:GR,fontStyle:"bold",fontSize:s.ND>28?5.2:6.8},footStyles:{textColor:GR,fontStyle:"normal",fontSize:7},
     columnStyles:cs,didParseCell:h=>{if(h.section==="head"&&h.row.index===0&&h.column.index>0&&h.cell.colSpan===7){h.cell.styles.textColor=NAVY;h.cell.styles.fontSize=9}
       if(h.section==="foot"&&h.column.index===0)h.cell.styles.halign="left";
       if(h.section==="body"&&h.column.index===0){h.cell.styles.fontStyle="bold";h.cell.styles.textColor=[35,40,63]}},
@@ -455,9 +470,9 @@ async function exportPDF(){
   if(y>PH-60){doc.addPage();chrome();y=30}
   const colW=128;
   doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...NAVY);doc.text("Horários",M,y);doc.text("Conferência legal",M+colW+12,y);
-  const hb=[];for(let e=0;e<c.N;e++){const x=s.sh[e];hb.push([name(c,e)].concat(s.m>1?[letters[s.types[e]]]:[]).concat([hm(x.s),s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo",hm(x.e)]))}
+  const hb=[];for(let e=0;e<c.N;e++){const x=s.sh[e];hb.push([name(c,e)].concat(s.m>1?[letters[s.types[e]]]:[]).concat([hm(x.s),s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo",hm(x.e)]).concat(s.sunOpen?["A cada "+s.per[e]+" sem."+(s.fem[e]?" (mulher)":"")]:[]))}
   const startPage=doc.internal.getCurrentPageInfo().pageNumber;
-  doc.autoTable({startY:y+2,head:[["Funcionário"].concat(s.m>1?["Turno"]:[]).concat(["Entrada","Intervalo","Saída"])],body:hb,theme:"plain",
+  doc.autoTable({startY:y+2,head:[["Funcionário"].concat(s.m>1?["Turno"]:[]).concat(["Entrada","Intervalo","Saída"]).concat(s.sunOpen?["Domingo de folga"]:[])],body:hb,theme:"plain",
     margin:{left:M,right:PW-M-colW,top:26,bottom:14},tableWidth:colW,
     styles:{font:"helvetica",fontSize:8,cellPadding:1.6,lineColor:LN,lineWidth:{bottom:.2},textColor:[35,40,63]},
     headStyles:{textColor:GR,fontSize:7,lineColor:NAVY,lineWidth:{bottom:.5}},didDrawPage:()=>{if(doc.internal.getCurrentPageInfo().pageNumber>startPage)chrome()}});
