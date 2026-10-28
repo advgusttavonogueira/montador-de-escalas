@@ -11,7 +11,7 @@ O empregador informa:
 - cargo, função e nome da empresa;
 - dias de funcionamento e o horário que precisa ficar coberto;
 - quantas pessoas devem estar no posto ao mesmo tempo;
-- número de funcionários, regime (5x2 ou 6x1) e carga semanal;
+- número de funcionários, regime (5x2 ou 6x1) e carga semanal, incluindo 5x2 de 42 horas com compensação, para a fase de transição da EC 141/2026;
 - duração do intervalo;
 - dias da semana em que pode dar folga e a regra de folga aos domingos.
 

@@ -142,6 +142,7 @@ footer .fine{flex-basis:100%;max-width:90ch}
             <label for="qtd">Funcionários<input type="number" id="qtd" min="1" max="40" value="4"></label>
             <label for="regime">Regime<select id="regime">
               <option value="5-40">5x2, 40h semanais</option>
+              <option value="5-42">5x2, 42h semanais (com compensação)</option>
               <option value="5-44">5x2, 44h semanais</option>
               <option value="6-44">6x1, 44h semanais</option>
               <option value="6-36">6x1, 36h semanais</option>
@@ -305,7 +306,7 @@ function solve(c){
     const candOf=e=>{const s=sh[e].s,en=sh[e].e,cs=[];for(let bs=s+60;bs<=s+360;bs+=10){if(en-(bs+I)>360)continue;if(bs+I>en-60)break;cs.push(bs)}return cs.length?cs:[brk[e]]};
     const ovl=()=>{let n=0;for(let x=0;x<c.N;x++)for(let y=x+1;y<c.N;y++)if(brk[x]<brk[y]+I&&brk[y]<brk[x]+I)n++;return n};
     if(m===1){const s0=sh[0].s,e0=sh[0].e,lo=Math.max(s0+60,e0-I-360),hi=Math.min(s0+360,e0-60-I);
-      if(hi>=lo){const ns=Math.floor((hi-lo)/I)+1,st0=lo+Math.floor(((hi-lo)-(ns-1)*I)/2/5)*5,slots=[...Array(ns).keys()].map(j=>st0+j*I);
+      if(hi>=lo){const ns=Math.floor((hi-lo)/I)+1,st0=(function(){const x=lo+Math.floor(((hi-lo)-(ns-1)*I)/2);const u=Math.ceil(x/10)*10;return u+(ns-1)*I<=hi?u:Math.floor(x/10)*10>=lo?Math.floor(x/10)*10:x})(),slots=[...Array(ns).keys()].map(j=>st0+j*I);
         const co=(x,y)=>{let n=0;for(let d=0;d<ND;d++)if(R[x][d]&&R[y][d])n++;return n};
         const asg=new Array(c.N).fill(-1),use=new Array(ns).fill(0);
         for(let e=0;e<c.N;e++){let bj=0,bv=Infinity;for(let j=0;j<ns;j++){let v=use[j]*0.01;for(let o=0;o<e;o++)if(asg[o]===j)v+=co(e,o);if(v<bv){bv=v;bj=j}}asg[e]=bj;use[bj]++;brk[e]=slots[bj]}
@@ -330,9 +331,13 @@ function solve(c){
   const needN=Math.ceil(perDay*c.open.length/Math.max(1,Math.min(c.wd,c.open.length)));
   if(short===0)chk.push(["ok",`Cobertura garantida: em todos os dias de funcionamento há pelo menos ${c.minp} ${c.minp>1?"pessoas":"pessoa"} no posto das ${hm(c.a)} às ${hm(c.b)}, inclusive nos intervalos.`]);
   else chk.push(["bad",`Em ${short} ${short>1?"dias":"dia"} do ciclo a cobertura fica abaixo do mínimo em algum momento. Com esses parâmetros, a estimativa é de pelo menos ${Math.max(needN,c.N+1)} funcionários, ou libere mais dias de folga.`]);
+  const comp=D>480?D-480:0;
   if(D>600)chk.push(["bad",`Jornada diária de ${dur(D)}: passa do limite de 10 horas (art. 59, §2º, CLT).`]);
-  else if(D>480)chk.push(["warn",`Jornada diária de ${dur(D)}: acima de 8 horas, exige acordo de compensação de horas por escrito (art. 59, §2º, CLT e Súmula 85 do TST).`]);
-  else chk.push(["ok",`Jornada de ${dur(D)} por dia e ${c.wh}h por semana, dentro dos limites do art. 7º, XIII, da Constituição.`]);
+  else if(comp)chk.push(["warn",`Jornada de ${dur(D)} por dia: são ${dur(comp)} diários além de 8 horas, compensados dentro da própria semana, que fecha em ${c.wh} horas com duas folgas, sem hora extra. Exige acordo de compensação por escrito, de preferência previsto em acordo ou convenção coletiva, como prevê a EC 141/2026 (art. 7º, XIII, CF; art. 59, §2º, CLT; Súmula 85 do TST). Sem esse acordo, os ${dur(comp)} diários são horas extras.`]);
+  else chk.push(["ok",`Jornada de ${dur(D)} por dia, dentro do limite de 8 horas.`]);
+  if(c.wh>=44)chk.push(["bad","Carga de 44 horas semanais: pela EC 141/2026, o limite cai para 42 horas a partir de 16/12/2026 e para 40 horas a partir de 16/12/2027."]);
+  else if(c.wh>40)chk.push(["warn",`Carga de ${c.wh} horas semanais: permitida na fase de transição da EC 141/2026, de 16/12/2026 a 15/12/2027. A partir de 16/12/2027 o limite é de 40 horas, sem redução do salário.`]);
+  else chk.push(["ok",`Carga de ${c.wh} horas semanais, dentro do limite final da EC 141/2026.`]);
   if(D>360){
     if(c.I<60)chk.push(["warn",`Intervalo de ${c.I} minutos: para jornada acima de 6 horas o mínimo é 1 hora (art. 71, CLT). Redução só por convenção ou acordo coletivo, respeitado o mínimo de 30 minutos (art. 611-A, III).`]);
     else if(c.I>120)chk.push(["warn","Intervalo acima de 2 horas exige acordo escrito ou norma coletiva (art. 71, CLT)."]);
