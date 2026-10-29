@@ -110,6 +110,56 @@ ul.checks{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .toast{font-size:13px;color:var(--ok);font-weight:600;min-height:1em}
 footer{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18px}
 footer .fine{flex-basis:100%;max-width:90ch}
+.wtabs{display:none}
+@media (max-width:640px){
+  h1{margin-top:16px}
+  .panel{padding:14px}
+  .days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+  #offDays{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .day span{display:block;min-width:0;padding:8px 0;font-size:12.5px}
+  .row2{gap:8px}
+  .xrow{grid-template-columns:1fr 1fr}
+  .xrow label:first-child{grid-column:1/-1}
+  .xrow .xrm{grid-column:1/-1;justify-self:start;border:0;background:none;color:var(--muted);text-decoration:underline;padding:2px 0}
+  .headline h2{font-size:22px}
+  .facts{gap:4px 14px;font-size:12.5px}
+  .wtabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:8px;padding-bottom:2px}
+  .wtab{flex:1 0 auto;padding:8px 10px;font-size:13px;border-color:var(--line);color:var(--muted);background:var(--surface)}
+  .wtab[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--surface)}
+  table.esc{min-width:0;table-layout:fixed}
+  .esc thead tr:first-child th.wk{display:none}
+  .esc .nm{min-width:0;width:96px;padding:0 6px;font-size:12px;white-space:normal;line-height:1.2}
+  .esc th,.esc td{height:38px}
+  .esc .hrs{display:none}
+  .esc thead tr:first-child th:last-child{display:none}
+  .esc tfoot td:last-child{display:none}
+  .esc tbody td:last-child{display:none}
+  .esc[data-wk="0"] :is(th,td):is(.k1,.k2,.k3,.k4,.k5,.k6,.k7){display:none}
+  .esc[data-wk="1"] :is(th,td):is(.k0,.k2,.k3,.k4,.k5,.k6,.k7){display:none}
+  .esc[data-wk="2"] :is(th,td):is(.k0,.k1,.k3,.k4,.k5,.k6,.k7){display:none}
+  .esc[data-wk="3"] :is(th,td):is(.k0,.k1,.k2,.k4,.k5,.k6,.k7){display:none}
+  .esc[data-wk="4"] :is(th,td):is(.k0,.k1,.k2,.k3,.k5,.k6,.k7){display:none}
+  .esc[data-wk="5"] :is(th,td):is(.k0,.k1,.k2,.k3,.k4,.k6,.k7){display:none}
+  .esc[data-wk="6"] :is(th,td):is(.k0,.k1,.k2,.k3,.k4,.k5,.k7){display:none}
+  .esc[data-wk="7"] :is(th,td):is(.k0,.k1,.k2,.k3,.k4,.k5,.k6){display:none}
+  table.hor,.hor tbody{display:block}
+  .hor thead{display:none}
+  .hor tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .hor td{border:0;padding:0;font-size:13.5px}
+  .hor td[data-l]::before{content:attr(data-l);display:block;font-size:11px;font-weight:600;color:var(--muted);font-family:var(--body);letter-spacing:.02em}
+  .hor td.hn{grid-column:1/-1;font-weight:700;font-size:14.5px}
+  .hor td.hiv{grid-column:1/-1}
+  .hor td.hn{order:0}
+  .hor td[data-l="Turno"],.hor td[data-l="Entrada"],.hor td[data-l="Saída"]{order:1}
+  .hor td.hiv{order:2}
+  .row2:has(#qtd){grid-template-columns:96px minmax(0,1fr)}
+  .esc tfoot td.nm{font-size:11px}
+  .ivb{width:36px;height:36px;font-size:18px}
+  .ivg{gap:8px}
+  .result>.btns{position:sticky;bottom:0;z-index:5;background:var(--bg);margin-inline:calc(-1 * max(16px, env(safe-area-inset-left, 0px)));padding:10px max(16px, env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-bottom, 0px));border-top:1px solid var(--line)}
+  .result>.btns button{flex:1}
+  .result>.btns .toast{flex-basis:100%}
+}
 @media print{
   body{background:#fff;color:#000;padding:0}
   .no-print,form,.panel.form-panel{display:none!important}
@@ -427,10 +477,10 @@ function solve(c){
   return {manual,xb,xNoFit,sunOpen,per,fem,D,I,S,L,m,starts,types,sh,brk,R,W,ND,isOpen,minDay,cntDay,hoursWeek,chk,maxCons};
 }
 
-let last=null,lastC=null;
+let last=null,lastC=null,curWk=0;
 function name(c,e){return c.names[e]||`Funcionário ${e+1}`}
 function render(){
-  const c=read();lastC=c;const s=solve(c);last=s;const tt=$("toast");if(tt)tt.textContent="";
+  const c=read();lastC=c;const s=solve(c);last=s;if(curWk>=s.W)curWk=0;const tt=$("toast");if(tt)tt.textContent="";
   const letters="ABCDEFGH";
   const st=c.start?new Date(c.start+"T12:00:00"):null;
   const dt=d=>{if(!st)return"";const x=new Date(st);x.setDate(x.getDate()+d);return String(x.getDate()).padStart(2,"0")+"/"+String(x.getMonth()+1).padStart(2,"0")};
@@ -439,26 +489,26 @@ function render(){
   ${c.funcao?`<p class="hint" style="margin:4px 0 10px;font-size:13px">${esc(c.funcao)}${c.empresa?" | "+esc(c.empresa):""}</p>`:(c.empresa?`<p class="hint">${esc(c.empresa)}</p>`:"")}
   <div class="facts"><span><b>${c.N}</b> funcionários</span><span>Regime <b>${c.wd===5?"5x2":"6x1"}, ${c.wh}h</b></span><span>Jornada <b>${dur(s.D)}</b> por dia</span><span>Intervalo <b>${s.I?dur(s.I):"sem"}</b></span><span>Cobertura <b>${hm(c.a)} às ${hm(c.b)}</b></span><span>Ciclo de <b>${s.W} semanas</b></span></div></div>`;
   // grade
-  h+=`<div><div class="scroll"><table class="esc"><thead><tr><th class="nm" rowspan="2" style="vertical-align:bottom">Funcionário</th>`;
-  for(let w=0;w<s.W;w++)h+=`<th colspan="7" class="wk">Semana ${w+1}</th>`;
+  h+=`<div><div class="wtabs no-print" role="tablist" aria-label="Semana exibida">${[...Array(s.W).keys()].map(w=>`<button type="button" role="tab" class="wtab" data-w="${w}" aria-selected="${w===curWk}">Semana ${w+1}</button>`).join("")}</div><div class="scroll"><table class="esc" data-wk="${curWk}"><thead><tr><th class="nm" rowspan="2" style="vertical-align:bottom">Funcionário</th>`;
+  for(let w=0;w<s.W;w++)h+=`<th colspan="7" class="wk k${w}">Semana ${w+1}</th>`;
   h+=`<th rowspan="2" style="vertical-align:bottom">Horas</th></tr><tr>`;
-  for(let d=0;d<s.ND;d++)h+=`<th class="${d%7===6?"sun":""} ${d%7===0?"wk":""}">${DN[d%7]}<small>${dt(d)}</small></th>`;
+  for(let d=0;d<s.ND;d++)h+=`<th class="k${Math.floor(d/7)} ${d%7===6?"sun":""} ${d%7===0?"wk":""}">${DN[d%7]}<small>${dt(d)}</small></th>`;
   h+=`</tr></thead><tbody>`;
   for(let e=0;e<c.N;e++){h+=`<tr><td class="nm">${esc(name(c,e))}</td>`;
-    for(let d=0;d<s.ND;d++){const cls=d%7===0?" wk":"";
+    for(let d=0;d<s.ND;d++){const cls=(d%7===0?" wk":"")+" k"+Math.floor(d/7);
       if(!s.isOpen(d))h+=`<td class="x${cls}" title="Empresa fechada">F</td>`;
       else if(s.R[e][d])h+=`<td class="w${cls}${d%7===6?" sun":""}">${s.m>1?letters[s.types[e]]:"T"}</td>`;
       else h+=`<td class="f${cls}">F</td>`;}
     const hw=s.hoursWeek[e];h+=`<td class="hrs">${hw.every(x=>x===hw[0])?fmtH(hw[0])+"/sem":hw.map(fmtH).join(" | ")}</td></tr>`}
   h+=`</tbody><tfoot><tr><td class="nm">Escalados no dia</td>`;
-  for(let d=0;d<s.ND;d++)h+=`<td class="${d%7===0?"wk":""}">${s.isOpen(d)?s.cntDay[d]:""}</td>`;
+  for(let d=0;d<s.ND;d++)h+=`<td class="k${Math.floor(d/7)} ${d%7===0?"wk":""}">${s.isOpen(d)?s.cntDay[d]:""}</td>`;
   h+=`<td></td></tr><tr><td class="nm">Mínimo no posto</td>`;
-  for(let d=0;d<s.ND;d++){const v=s.minDay[d];h+=`<td class="${d%7===0?"wk":""} ${v!==null&&v<c.minp?"short":""}">${v===null?"":v}</td>`}
+  for(let d=0;d<s.ND;d++){const v=s.minDay[d];h+=`<td class="k${Math.floor(d/7)} ${d%7===0?"wk":""} ${v!==null&&v<c.minp?"short":""}">${v===null?"":v}</td>`}
   h+=`<td></td></tr></tfoot></table></div>
   <div class="legend" style="margin-top:8px"><span><span class="sw" style="background:var(--surface)"></span>${s.m>1?"Letra = turno do dia":"T = trabalho"}</span><span><span class="sw" style="background:var(--sand-soft)"></span>F = folga</span><span><span class="sw" style="background:var(--soft)"></span>Empresa fechada ou domingo</span><span>A escala se repete a cada ${s.W} semanas.</span></div></div>`;
   // horários + checagens
   h+=`<div class="two"><div class="panel"><h3>Horários</h3>${s.I>0?'<p class="hint no-print" style="margin:-2px 0 8px">Use − e + para adiantar ou atrasar o intervalo em 10 minutos.</p>':""}<div style="overflow-x:auto"><table class="hor"><thead><tr><th>Funcionário</th>${s.m>1?"<th>Turno</th>":""}<th>Entrada</th><th>Intervalo</th>${c.extras.length?"<th>Pausas</th>":""}<th>Saída</th>${s.sunOpen?"<th>Domingo de folga</th>":""}</tr></thead><tbody>`;
-  for(let e=0;e<c.N;e++){const x=s.sh[e];h+=`<tr><td>${esc(name(c,e))}</td>${s.m>1?`<td class="t">${letters[s.types[e]]}</td>`:""}<td>${hm(x.s)}</td><td>${s.brk[e]!=null?`<div class="ivc"><span class="ivg"><button type="button" class="ivb no-print" data-e="${e}" data-d="-10" aria-label="Adiantar o intervalo de ${esc(name(c,e))} em 10 minutos" title="10 minutos mais cedo">−</button><span class="ivt${s.manual[e]?" man":""}">${hm(s.brk[e])} às ${hm(s.brk[e]+s.I)}</span><button type="button" class="ivb no-print" data-e="${e}" data-d="10" aria-label="Atrasar o intervalo de ${esc(name(c,e))} em 10 minutos" title="10 minutos mais tarde">+</button></span>${s.manual[e]?`<button type="button" class="ivr no-print" data-e="${e}">voltar ao automático</button>`:""}</div>`:"Sem intervalo"}</td>${c.extras.length?`<td>${xtxt(s,e)}</td>`:""}<td>${hm(x.e)}</td>${s.sunOpen?`<td>${s.per[e]===2?"A cada 2 semanas":s.per[e]===3?"A cada 3 semanas":"A cada 4 semanas"}${s.fem[e]?" (mulher)":""}</td>`:""}</tr>`}
+  for(let e=0;e<c.N;e++){const x=s.sh[e];h+=`<tr><td class="hn">${esc(name(c,e))}</td>${s.m>1?`<td class="t" data-l="Turno">${letters[s.types[e]]}</td>`:""}<td data-l="Entrada">${hm(x.s)}</td><td class="hiv" data-l="Intervalo">${s.brk[e]!=null?`<div class="ivc"><span class="ivg"><button type="button" class="ivb no-print" data-e="${e}" data-d="-10" aria-label="Adiantar o intervalo de ${esc(name(c,e))} em 10 minutos" title="10 minutos mais cedo">−</button><span class="ivt${s.manual[e]?" man":""}">${hm(s.brk[e])} às ${hm(s.brk[e]+s.I)}</span><button type="button" class="ivb no-print" data-e="${e}" data-d="10" aria-label="Atrasar o intervalo de ${esc(name(c,e))} em 10 minutos" title="10 minutos mais tarde">+</button></span>${s.manual[e]?`<button type="button" class="ivr no-print" data-e="${e}">voltar ao automático</button>`:""}</div>`:"Sem intervalo"}</td>${c.extras.length?`<td class="hiv" data-l="Pausas">${xtxt(s,e)}</td>`:""}<td data-l="Saída">${hm(x.e)}</td>${s.sunOpen?`<td class="hiv" data-l="Domingo de folga">${s.per[e]===2?"A cada 2 semanas":s.per[e]===3?"A cada 3 semanas":"A cada 4 semanas"}${s.fem[e]?" (mulher)":""}</td>`:""}</tr>`}
   h+=`</tbody></table></div></div><div class="panel"><h3>Conferência legal</h3><ul class="checks">${s.chk.map(x=>`<li class="${x[0]}">${x[1]}</li>`).join("")}</ul></div></div>`;
 
   $("out").innerHTML=h;
@@ -571,7 +621,8 @@ function addExtra(d,ws,we){const box=$("extras");if(box.children.length>=3)retur
   r.querySelector(".xrm").onclick=()=>{r.remove();$("addExtra").hidden=false;render()};
   box.appendChild(r);$("addExtra").hidden=box.children.length>=3;}
 $("addExtra").onclick=()=>{const n=$("extras").children.length;addExtra(n?10:15,n?"16:30":"15:00",n?"18:00":"17:00");render()};
-$("out").addEventListener("click",ev=>{const b=ev.target.closest(".ivb,.ivr");if(!b||!last)return;const e=+b.dataset.e;
+$("out").addEventListener("click",ev=>{const t=ev.target.closest(".wtab");if(t){curWk=+t.dataset.w;const tb=document.querySelector(".esc");if(tb)tb.dataset.wk=curWk;document.querySelectorAll(".wtab").forEach(x=>x.setAttribute("aria-selected",String(+x.dataset.w===curWk)));return}
+  const b=ev.target.closest(".ivb,.ivr");if(!b||!last)return;const e=+b.dataset.e;
   if(b.classList.contains("ivr"))delete brkOv.v[e];else brkOv.v[e]=(brkOv.v[e]!=null?brkOv.v[e]:last.brk[e])+(+b.dataset.d);
   render();const nb=document.querySelector(`.${b.classList.contains("ivr")?"ivb":"ivb"}[data-e="${e}"][data-d="${b.dataset.d||10}"]`);if(nb)nb.focus()});
 $("copy").onclick=copyTSV;$("pdf").onclick=exportPDF;
