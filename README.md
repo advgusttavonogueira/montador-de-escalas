@@ -18,7 +18,7 @@ O empregador informa:
 E recebe, na hora:
 
 - a escala de um ciclo de 3 ou 4 semanas, com datas, turnos e folgas;
-- o horário de entrada, intervalo e saída de cada funcionário;
+- o horário de entrada, intervalo e saída de cada funcionário, com botões para adiantar ou atrasar o intervalo de cada um;
 - a cobertura mínima de cada dia, já descontados os intervalos;
 - a conferência de jornada, intervalo, dias seguidos de trabalho, folga dominical, adicional noturno e interjornada;
 - o aviso de quando a equipe é pequena demais para o horário pedido.

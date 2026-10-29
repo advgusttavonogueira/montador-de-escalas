@@ -93,6 +93,13 @@ h3{font-family:var(--display);font-weight:600;font-size:19px;color:var(--navy);m
 table.hor{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 .hor th{font-size:11.5px;color:var(--muted);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1.5px solid var(--navy)}
 .hor td{padding:7px 8px;border-bottom:1px solid var(--line);font-size:13px}
+.ivc{display:grid;justify-items:start;gap:2px}
+.ivg{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.ivb{width:26px;height:26px;padding:0;border-radius:6px;font-size:15px;line-height:1;display:inline-grid;place-items:center}
+.ivt{padding:0 4px;font-variant-numeric:tabular-nums}
+.ivt.man{color:var(--accent);font-weight:600}
+.ivr{padding:2px 0;font-size:11.5px;border:0;background:none;color:var(--muted);text-decoration:underline}
+.hor td:first-child{white-space:nowrap}
 .hor td.t{font-family:var(--display);font-weight:600;font-size:16px;color:var(--navy)}
 ul.checks{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .checks li{display:grid;grid-template-columns:10px 1fr;gap:10px;font-size:13px;line-height:1.45}
@@ -229,6 +236,7 @@ function syncOff(){
 }
 
 let seed=7;
+const brkOv={sig:null,v:{}};
 function read(){
   const [wd,wh]=$("regime").value.split("-").map(Number);
   const open=[...Array(7).keys()].filter(i=>$("open"+i).checked);
@@ -345,6 +353,17 @@ function solve(c){
         brk[e]=bb;curD=deficit(placed)}
     }
   }
+  const sig=`${c.N}|${D}|${I}|${c.a}|${c.b}|${c.wd}`;
+  if(brkOv.sig!==sig){brkOv.sig=sig;brkOv.v={}}
+  const manual=new Array(c.N).fill(false);
+  if(I>0)for(let e=0;e<c.N;e++){const v=brkOv.v[e];if(v==null)continue;
+    const lo=sh[e].s+30,hi=sh[e].e-30-I;const t=Math.min(Math.max(v,lo),hi);brkOv.v[e]=t;brk[e]=t;manual[e]=true}
+  if(I>0&&manual.some(Boolean)){const allE=[...Array(c.N).keys()];
+    const cand=e=>{const a=sh[e].s,en=sh[e].e,cs=[];for(let bs=a+60;bs<=a+360;bs+=10){if(en-(bs+I)>360)continue;if(bs+I>en-60)break;cs.push(bs)}return cs.length?cs:[brk[e]]};
+    const ov=()=>{let n=0;for(let x=0;x<c.N;x++)for(let y=x+1;y<c.N;y++)if(brk[x]<brk[y]+I&&brk[y]<brk[x]+I)n++;return n};
+    let cd=deficit(allE);
+    for(let pass=0;pass<6&&cd>0;pass++)for(let e=0;e<c.N;e++){if(manual[e])continue;let bb=brk[e],bv=cd*1000+ov();
+      for(const bs of cand(e)){brk[e]=bs;const v=deficit(allE)*1000+ov();if(v<bv){bv=v;bb=bs}}brk[e]=bb;cd=deficit(allE)}}
   const all=[...Array(c.N).keys()];
   let xNoFit=0;
   c.extras.forEach((X,k)=>{
@@ -370,6 +389,7 @@ function solve(c){
   const perDay=r.reduce((a,b)=>a+b,0);
   const needN=Math.ceil(perDay*c.open.length/Math.max(1,Math.min(c.wd,c.open.length)));
   if(short===0)chk.push(["ok",`Cobertura garantida: em todos os dias de funcionamento há pelo menos ${c.minp} ${c.minp>1?"pessoas":"pessoa"} no posto das ${hm(c.a)} às ${hm(c.b)}, inclusive nos intervalos.`]);
+  else if(manual.some(Boolean))chk.push(["bad",`Com o intervalo ajustado manualmente, em ${short} ${short>1?"dias":"dia"} do ciclo o posto fica abaixo do mínimo, porque o intervalo coincide com o de outra pessoa escalada no mesmo dia. Mude o horário ou volte ao automático.`]);
   else chk.push(["bad",`Em ${short} ${short>1?"dias":"dia"} do ciclo a cobertura fica abaixo do mínimo em algum momento. Com esses parâmetros, a estimativa é de pelo menos ${Math.max(needN,c.N+1)} funcionários, ou libere mais dias de folga.${c.extras.length?" As pausas adicionais também pesam: tente ampliar a faixa de horário delas.":""}`]);
   const comp=D>480?D-480:0;
   if(D>600)chk.push(["bad",`Jornada diária de ${dur(D)}: passa do limite de 10 horas (art. 59, §2º, CLT).`]);
@@ -378,6 +398,9 @@ function solve(c){
   if(c.wh>=44)chk.push(["bad","Carga de 44 horas semanais: pela EC 141/2026, o limite cai para 42 horas a partir de 16/12/2026 e para 40 horas a partir de 16/12/2027."]);
   else if(c.wh>40)chk.push(["warn",`Carga de ${c.wh} horas semanais: permitida na fase de transição da EC 141/2026, de 16/12/2026 a 15/12/2027. A partir de 16/12/2027 o limite é de 40 horas, sem redução do salário.`]);
   else chk.push(["ok",`Carga de ${c.wh} horas semanais, dentro do limite final da EC 141/2026.`]);
+  if(I>0&&D>360){const lg=[];for(let e=0;e<c.N;e++){if(brk[e]==null)continue;const a1=brk[e]-sh[e].s,a2=sh[e].e-(brk[e]+I);if(a1>360||a2>360)lg.push(`${c.names[e]||"Funcionário "+(e+1)} (${dur(Math.max(a1,a2))} seguidas ${a1>360?"antes":"depois"} do intervalo)`)}
+    if(lg.length)chk.push(["bad",`Mais de 6 horas de trabalho sem intervalo: ${lg.join("; ")}. Pelo art. 71 da CLT, o intervalo deve ser concedido antes de completar 6 horas seguidas. Ajuste o horário do intervalo.`]);
+    const nm=manual.filter(Boolean).length;if(nm)chk.push(["ok",`Intervalo ajustado manualmente para ${nm} ${nm>1?"funcionários":"funcionário"}. A cobertura e as demais regras foram conferidas de novo.`]);}
   if(D>360){
     if(c.I<60)chk.push(["warn",`Intervalo de ${c.I} minutos: para jornada acima de 6 horas o mínimo é 1 hora (art. 71, CLT). Redução só por convenção ou acordo coletivo, respeitado o mínimo de 30 minutos (art. 611-A, III).`]);
     else if(c.I>120)chk.push(["warn","Intervalo acima de 2 horas exige acordo escrito ou norma coletiva (art. 71, CLT)."]);
@@ -401,7 +424,7 @@ function solve(c){
   if(extras)chk.push(["warn",`Para que ninguém passe de 6 dias seguidos com o revezamento de domingos, ${extras} ${extras>1?"semanas do ciclo têm":"semana do ciclo tem"} uma folga a mais. Nessas semanas a carga fica abaixo de ${c.wh}h, sem prejuízo do salário contratado.`]);
   if(shortAllowed)chk.push(["warn","Os dias de folga marcados não bastam para dar todas as folgas da semana. A escala usou outros dias em que a empresa abre."]);
   if(fewerDays)chk.push(["warn",`A empresa fecha mais dias do que as folgas do regime ${c.wd===5?"5x2":"6x1"}. Nesses casos a semana tem menos dias de trabalho e menos horas.`]);
-  return {xb,xNoFit,sunOpen,per,fem,D,I,S,L,m,starts,types,sh,brk,R,W,ND,isOpen,minDay,cntDay,hoursWeek,chk,maxCons};
+  return {manual,xb,xNoFit,sunOpen,per,fem,D,I,S,L,m,starts,types,sh,brk,R,W,ND,isOpen,minDay,cntDay,hoursWeek,chk,maxCons};
 }
 
 let last=null,lastC=null;
@@ -434,9 +457,9 @@ function render(){
   h+=`<td></td></tr></tfoot></table></div>
   <div class="legend" style="margin-top:8px"><span><span class="sw" style="background:var(--surface)"></span>${s.m>1?"Letra = turno do dia":"T = trabalho"}</span><span><span class="sw" style="background:var(--sand-soft)"></span>F = folga</span><span><span class="sw" style="background:var(--soft)"></span>Empresa fechada ou domingo</span><span>A escala se repete a cada ${s.W} semanas.</span></div></div>`;
   // horários + checagens
-  h+=`<div class="two"><div class="panel"><h3>Horários</h3><table class="hor"><thead><tr><th>Funcionário</th>${s.m>1?"<th>Turno</th>":""}<th>Entrada</th><th>Intervalo</th>${c.extras.length?"<th>Pausas</th>":""}<th>Saída</th>${s.sunOpen?"<th>Domingo de folga</th>":""}</tr></thead><tbody>`;
-  for(let e=0;e<c.N;e++){const x=s.sh[e];h+=`<tr><td>${esc(name(c,e))}</td>${s.m>1?`<td class="t">${letters[s.types[e]]}</td>`:""}<td>${hm(x.s)}</td><td>${s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo"}</td>${c.extras.length?`<td>${xtxt(s,e)}</td>`:""}<td>${hm(x.e)}</td>${s.sunOpen?`<td>${s.per[e]===2?"A cada 2 semanas":s.per[e]===3?"A cada 3 semanas":"A cada 4 semanas"}${s.fem[e]?" (mulher)":""}</td>`:""}</tr>`}
-  h+=`</tbody></table></div><div class="panel"><h3>Conferência legal</h3><ul class="checks">${s.chk.map(x=>`<li class="${x[0]}">${x[1]}</li>`).join("")}</ul></div></div>`;
+  h+=`<div class="two"><div class="panel"><h3>Horários</h3>${s.I>0?'<p class="hint no-print" style="margin:-2px 0 8px">Use − e + para adiantar ou atrasar o intervalo em 10 minutos.</p>':""}<div style="overflow-x:auto"><table class="hor"><thead><tr><th>Funcionário</th>${s.m>1?"<th>Turno</th>":""}<th>Entrada</th><th>Intervalo</th>${c.extras.length?"<th>Pausas</th>":""}<th>Saída</th>${s.sunOpen?"<th>Domingo de folga</th>":""}</tr></thead><tbody>`;
+  for(let e=0;e<c.N;e++){const x=s.sh[e];h+=`<tr><td>${esc(name(c,e))}</td>${s.m>1?`<td class="t">${letters[s.types[e]]}</td>`:""}<td>${hm(x.s)}</td><td>${s.brk[e]!=null?`<div class="ivc"><span class="ivg"><button type="button" class="ivb no-print" data-e="${e}" data-d="-10" aria-label="Adiantar o intervalo de ${esc(name(c,e))} em 10 minutos" title="10 minutos mais cedo">−</button><span class="ivt${s.manual[e]?" man":""}">${hm(s.brk[e])} às ${hm(s.brk[e]+s.I)}</span><button type="button" class="ivb no-print" data-e="${e}" data-d="10" aria-label="Atrasar o intervalo de ${esc(name(c,e))} em 10 minutos" title="10 minutos mais tarde">+</button></span>${s.manual[e]?`<button type="button" class="ivr no-print" data-e="${e}">voltar ao automático</button>`:""}</div>`:"Sem intervalo"}</td>${c.extras.length?`<td>${xtxt(s,e)}</td>`:""}<td>${hm(x.e)}</td>${s.sunOpen?`<td>${s.per[e]===2?"A cada 2 semanas":s.per[e]===3?"A cada 3 semanas":"A cada 4 semanas"}${s.fem[e]?" (mulher)":""}</td>`:""}</tr>`}
+  h+=`</tbody></table></div></div><div class="panel"><h3>Conferência legal</h3><ul class="checks">${s.chk.map(x=>`<li class="${x[0]}">${x[1]}</li>`).join("")}</ul></div></div>`;
 
   $("out").innerHTML=h;
 
@@ -548,6 +571,9 @@ function addExtra(d,ws,we){const box=$("extras");if(box.children.length>=3)retur
   r.querySelector(".xrm").onclick=()=>{r.remove();$("addExtra").hidden=false;render()};
   box.appendChild(r);$("addExtra").hidden=box.children.length>=3;}
 $("addExtra").onclick=()=>{const n=$("extras").children.length;addExtra(n?10:15,n?"16:30":"15:00",n?"18:00":"17:00");render()};
+$("out").addEventListener("click",ev=>{const b=ev.target.closest(".ivb,.ivr");if(!b||!last)return;const e=+b.dataset.e;
+  if(b.classList.contains("ivr"))delete brkOv.v[e];else brkOv.v[e]=(brkOv.v[e]!=null?brkOv.v[e]:last.brk[e])+(+b.dataset.d);
+  render();const nb=document.querySelector(`.${b.classList.contains("ivr")?"ivb":"ivb"}[data-e="${e}"][data-d="${b.dataset.d||10}"]`);if(nb)nb.focus()});
 $("copy").onclick=copyTSV;$("pdf").onclick=exportPDF;
 syncOff();render();
 })();
