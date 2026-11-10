@@ -46,6 +46,13 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .xrow{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .xrow input,.xrow select{background:var(--surface)}
+.djrow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.djrow .djh{grid-column:1/-1;display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-family:var(--display);font-weight:600;font-size:16px;color:var(--navy)}
+.djrow .djh small{font-family:var(--body);font-size:12px;font-weight:600;color:var(--muted)}
+.djrow .djh small.over{color:var(--warn)}
+.djrow label{font-size:11.5px}
+.djrow label:last-of-type{grid-column:1/-1}
+.djrow input,.djrow select{background:var(--surface);padding:7px 8px}
 .xrow button{padding:8px 10px;font-size:13px}
 @media (max-width:420px){.xrow{grid-template-columns:1fr 1fr}.xrow label:first-child{grid-column:1/-1}}
 .hint{font-size:12px;color:var(--muted);font-weight:400;margin:0}
@@ -152,6 +159,9 @@ footer .fine{flex-basis:100%;max-width:90ch}
   .hor td.hn{order:0}
   .hor td[data-l="Turno"],.hor td[data-l="Entrada"],.hor td[data-l="Saída"]{order:1}
   .hor td.hiv{order:2}
+  .hor.hd td{order:1}
+  .hor.hd td.hn{order:0}
+  .hor.hd td.hiv{order:2}
   .row2:has(#qtd){grid-template-columns:96px minmax(0,1fr)}
   .esc tfoot td.nm{font-size:11px}
   .ivb{width:36px;height:36px;font-size:18px}
@@ -191,10 +201,11 @@ footer .fine{flex-basis:100%;max-width:90ch}
         <div class="sec">
           <h2>Funcionamento</h2>
           <div><label style="margin-bottom:6px">Dias em que a empresa abre</label><div class="days" id="openDays"></div></div>
-          <div class="row2">
+          <div class="row2" id="covRow">
             <label for="ini">Cobrir a partir de<input type="time" id="ini" value="10:00"></label>
             <label for="fim">Até<input type="time" id="fim" value="19:20"></label>
           </div>
+          <p class="hint" id="covHint" hidden>Na jornada diferenciada, o horário a cobrir em cada dia é o horário praticado informado em "Equipe e jornada".</p>
           <label for="minp">Pessoas no posto ao mesmo tempo (mínimo)<input type="number" id="minp" min="1" max="20" value="1"></label>
         </div>
         <div class="sec">
@@ -210,7 +221,15 @@ footer .fine{flex-basis:100%;max-width:90ch}
               <option value="5-30">5x2, 30h semanais</option>
             </select></label>
           </div>
-          <label for="intv">Intervalo para refeição e descanso<select id="intv">
+          <label for="jmode">Jornada<select id="jmode">
+            <option value="u" selected>Igual em todos os dias</option>
+            <option value="d">Diferenciada por dia (ex.: sábado reduzido)</option>
+          </select></label>
+          <div id="djWrap" hidden style="display:grid;gap:8px">
+            <p class="hint" style="margin:0">Informe o horário praticado em cada dia. Quem trabalha no dia cumpre esse horário. A carga do regime passa a ser o limite semanal: a escala confere se nenhuma semana passa dela.</p>
+            <div id="djRows" style="display:grid;gap:8px"></div>
+          </div>
+          <label for="intv" id="intvWrap">Intervalo para refeição e descanso<select id="intv">
             <option value="15">15 minutos</option><option value="30">30 minutos</option><option value="45">45 minutos</option>
             <option value="60" selected>1 hora</option><option value="80">1h20</option><option value="90">1h30</option><option value="120">2 horas</option>
           </select></label>
@@ -287,6 +306,24 @@ function syncOff(){
 
 let seed=7;
 const brkOv={sig:null,v:{}};
+const DNF=["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"];
+const hhmm=m=>String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const djVals={};
+function djDefault(wd){const [nd,wh]=$("regime").value.split("-").map(Number);const a=tm($("ini").value||"10:00"),iv=parseInt($("intv").value);
+  if(wd===5)return {s:hhmm(a),e:hhmm(a+240),i:0};
+  const D=Math.round(wh*60/nd),I=D>360?iv:D>240?15:0;return {s:hhmm(a),e:hhmm(a+D+I),i:I}}
+function djSave(){document.querySelectorAll(".djrow").forEach(r=>{djVals[+r.dataset.wd]={s:r.querySelector(".djs").value,e:r.querySelector(".dje").value,i:+r.querySelector(".dji").value}})}
+function syncDJ(){const on=$("jmode").value==="d";$("djWrap").hidden=!on;$("covRow").hidden=on;$("covHint").hidden=!on;$("intvWrap").hidden=on;
+  if(!on)return;djSave();
+  const open=[...Array(7).keys()].filter(i=>$("open"+i).checked);
+  $("djRows").innerHTML=open.map(wd=>{const v=djVals[wd]||(djVals[wd]=djDefault(wd));
+    return `<div class="djrow" data-wd="${wd}"><div class="djh"><span>${DNF[wd]}</span><small class="djj"></small></div>
+    <label for="djs${wd}">Entrada<input type="time" class="djs" id="djs${wd}" value="${v.s}"></label>
+    <label for="dje${wd}">Saída<input type="time" class="dje" id="dje${wd}" value="${v.e}"></label>
+    <label for="dji${wd}">Intervalo<select class="dji" id="dji${wd}">${[[0,"Sem intervalo"],[15,"15 min"],[30,"30 min"],[45,"45 min"],[60,"1h"],[80,"1h20"],[90,"1h30"],[120,"2h"]].map(([m,t])=>`<option value="${m}" ${m===v.i?"selected":""}>${t}</option>`).join("")}</select></label></div>`}).join("");
+  djJ()}
+function djJ(){document.querySelectorAll(".djrow").forEach(r=>{const a=tm(r.querySelector(".djs").value||"00:00"),b=tm(r.querySelector(".dje").value||"00:00"),i=+r.querySelector(".dji").value,d=b-a-i;
+  const j=r.querySelector(".djj");j.textContent=d>0?dur(d)+" de trabalho":"horário inválido";j.classList.toggle("over",d<=0||d>480)})}
 function read(){
   const [wd,wh]=$("regime").value.split("-").map(Number);
   const open=[...Array(7).keys()].filter(i=>$("open"+i).checked);
@@ -296,16 +333,20 @@ function read(){
   return {empresa:$("empresa").value.trim(),cargo:$("cargo").value.trim()||"Cargo",funcao:$("funcao").value.trim(),
     wd,wh,open,allow,N,a:tm($("ini").value||"08:00"),b:tm($("fim").value||"17:00"),minp:Math.max(1,parseInt($("minp").value)||1),
     I:parseInt($("intv").value),domH:parseInt($("domH").value),mulheres:Math.max(0,parseInt($("mulheres").value)||0),names,start:$("inicio").value,
+    dif:$("jmode").value==="d",
+    P:(function(){const P=[];document.querySelectorAll(".djrow").forEach(r=>{P[+r.dataset.wd]={s:tm(r.querySelector(".djs").value||"10:00"),e:tm(r.querySelector(".dje").value||"14:00"),I:+r.querySelector(".dji").value}});return P})(),
     extras:[...document.querySelectorAll(".xrow")].map(r=>({dur:parseInt(r.querySelector(".xd").value)||10,ws:tm(r.querySelector(".xs").value||"15:00"),we:tm(r.querySelector(".xe").value||"17:00")})).filter(x=>x.we-x.ws>=x.dur)};
 }
 
 function solve(c){
   const notes=[];
+  const dif=c.dif,P=[],pbad=[];
+  if(dif)for(const wd of c.open){const q=c.P[wd]||{s:c.a,e:c.a+540,I:60};let a=q.s,b=q.e,Iq=q.I;if(b<=a){pbad.push(wd);b=a+60}if(b-a-Iq<0)Iq=0;P[wd]={s:a,e:b,I:Iq,D:b-a-Iq}}
   const D=Math.round(c.wh*60/c.wd);           // minutos trabalhados por dia
   const I=D>360?c.I:(D>240?Math.min(c.I,15):0);
   const S=D+I, L=c.b-c.a;
   // turnos
-  let m=S>=L?1:Math.ceil(L/S);
+  let m=dif?1:(S>=L?1:Math.ceil(L/S));
   const starts=[];
   if(m===1)starts.push(c.a); else for(let t=0;t<m;t++)starts.push(c.a+Math.round((L-S)*t/(m-1)/5)*5);
   const gap=m>1?starts[1]-starts[0]:0, overlap=m>1?S-gap:0;
@@ -349,10 +390,12 @@ function solve(c){
   function score(R){let p=0;
     for(let d=0;d<ND;d++){if(!isOpen(d))continue;let tot=0;const cnt=new Array(m).fill(0);
       for(let e=0;e<c.N;e++)if(R[e][d]){cnt[types[e]]++;tot++}
-      for(let t=0;t<m;t++)if(cnt[t]<r[t])p+=(r[t]-cnt[t])*1000;
+      const rr=dif?[c.minp+(P[d%7].I>0?1:0)]:r;
+      for(let t=0;t<m;t++)if(cnt[t]<rr[t])p+=(rr[t]-cnt[t])*1000;
       p+=tot*tot}
     for(const row of R){const mc=maxc(row);if(mc>6)p+=(mc-6)*5000;if(mc>5)p+=3}
     for(let e=0;e<c.N;e++)for(let w=0;w<W;w++)p+=opts[e][w][choice[e][w]].x*800;
+    if(dif){const cap=c.wh*60;for(let e=0;e<c.N;e++)for(let w=0;w<W;w++){let t=0;for(let k=0;k<7;k++)if(R[e][w*7+k]&&P[k])t+=P[k].D;if(t>cap)p+=(t-cap)*20}}
     return p}
   let R=build(),cur=score(R),best=cur,bestC=choice.map(x=>x.slice());
   const iters=Math.min(30000,3000+c.N*W*500);
@@ -378,7 +421,7 @@ function solve(c){
       for(const p of xb[e])if(p)for(let x=Math.max(p.t,c.a);x<Math.min(p.t+p.d,c.b);x++)v[x-c.a]--;}
     return v}
   function deficit(placed){let p=0;for(let d=0;d<ND;d++){if(!isOpen(d))continue;const v=covDay(d,placed);for(const x of v)if(x<c.minp)p+=c.minp-x}return p}
-  if(I>0){
+  if(!dif&&I>0){
     const placed=[];
     const order=[...Array(c.N).keys()].sort((x,y)=>sh[x].s-sh[y].s||x-y);
     for(const e of order){
@@ -406,7 +449,7 @@ function solve(c){
   const sig=`${c.N}|${D}|${I}|${c.a}|${c.b}|${c.wd}`;
   if(brkOv.sig!==sig){brkOv.sig=sig;brkOv.v={}}
   const manual=new Array(c.N).fill(false);
-  if(I>0)for(let e=0;e<c.N;e++){const v=brkOv.v[e];if(v==null)continue;
+  if(!dif&&I>0)for(let e=0;e<c.N;e++){const v=brkOv.v[e];if(v==null)continue;
     const lo=sh[e].s+30,hi=sh[e].e-30-I;const t=Math.min(Math.max(v,lo),hi);brkOv.v[e]=t;brk[e]=t;manual[e]=true}
   if(I>0&&manual.some(Boolean)){const allE=[...Array(c.N).keys()];
     const cand=e=>{const a=sh[e].s,en=sh[e].e,cs=[];for(let bs=a+60;bs<=a+360;bs+=10){if(en-(bs+I)>360)continue;if(bs+I>en-60)break;cs.push(bs)}return cs.length?cs:[brk[e]]};
@@ -415,8 +458,44 @@ function solve(c){
     for(let pass=0;pass<6&&cd>0;pass++)for(let e=0;e<c.N;e++){if(manual[e])continue;let bb=brk[e],bv=cd*1000+ov();
       for(const bs of cand(e)){brk[e]=bs;const v=deficit(allE)*1000+ov();if(v<bv){bv=v;bb=bs}}brk[e]=bb;cd=deficit(allE)}}
   const all=[...Array(c.N).keys()];
+  // jornada diferenciada: intervalos e pausas por dia da semana
+  const brkD=[...Array(c.N)].map(()=>new Array(7).fill(null));
+  const xbD=[...Array(c.N)].map(()=>[...Array(7)].map(()=>[]));
+  function covDayD(d){const p=P[d%7];if(!p)return [];const n=p.e-p.s,v=new Array(n).fill(0);
+    for(let e=0;e<c.N;e++){if(!R[e][d])continue;for(let x=0;x<n;x++)v[x]++;
+      const b=brkD[e][d%7];if(b!=null)for(let x=Math.max(b,p.s);x<Math.min(b+p.I,p.e);x++)v[x-p.s]--;
+      for(const q of xbD[e][d%7])if(q)for(let x=Math.max(q.t,p.s);x<Math.min(q.t+q.d,p.e);x++)v[x-p.s]--;}
+    return v}
+  function defWd(wd){let t=0;for(let d=wd;d<ND;d+=7){const v=covDayD(d);for(const x of v)if(x<c.minp)t+=c.minp-x}return t}
+  let xNoFitD=0;
+  if(dif){
+    for(const wd of c.open){const p=P[wd];if(!p||p.I<=0)continue;
+      let lo=p.s+60,hi=p.e-60-p.I;if(p.D>360){lo=Math.max(lo,p.e-p.I-360);hi=Math.min(hi,p.s+360)}
+      if(hi<lo){lo=hi=p.s+Math.round((p.e-p.s-p.I)/2/10)*10}
+      const cand=[];for(let t=Math.ceil(lo/10)*10;t<=hi;t+=10)cand.push(t);if(!cand.length)cand.push(lo);
+      const ns=Math.max(1,Math.floor((hi-lo)/p.I)+1);
+      const x0=lo+Math.floor(((hi-lo)-(ns-1)*p.I)/2),u=Math.ceil(x0/10)*10,st0=u+(ns-1)*p.I<=hi?u:x0;
+      const slots=[...Array(ns).keys()].map(j=>st0+j*p.I);
+      const co=[...Array(c.N)].map((_,x)=>[...Array(c.N)].map((_,y)=>{let n=0;for(let d=wd;d<ND;d+=7)if(R[x][d]&&R[y][d])n++;return n}));
+      const asg=new Array(c.N).fill(-1),use=new Array(ns).fill(0);
+      for(let e=0;e<c.N;e++){let bj=0,bv=Infinity;for(let j=0;j<ns;j++){let v=use[j]*0.01;for(let o=0;o<e;o++)if(asg[o]===j)v+=co[e][o];if(v<bv){bv=v;bj=j}}asg[e]=bj;use[bj]++;brkD[e][wd]=slots[bj]}
+      const ov=()=>{let n=0;for(let x=0;x<c.N;x++)for(let y=x+1;y<c.N;y++){const a=brkD[x][wd],b=brkD[y][wd];if(a<b+p.I&&b<a+p.I)n+=co[x][y]}return n};
+      let cd=defWd(wd);
+      for(let pass=0;pass<6&&cd>0;pass++)for(let e=0;e<c.N;e++){let bb=brkD[e][wd],bv=cd*1000+ov();
+        for(const t of cand){brkD[e][wd]=t;const v=defWd(wd)*1000+ov();if(v<bv){bv=v;bb=t}}brkD[e][wd]=bb;cd=defWd(wd)}
+    }
+    c.extras.forEach((X,k)=>{for(const wd of c.open){const p=P[wd];if(!p)continue;
+      for(let e=0;e<c.N;e++){let works=false;for(let d=wd;d<ND;d+=7)if(R[e][d])works=true;if(!works)continue;
+        const busy=[];if(brkD[e][wd]!=null)busy.push([brkD[e][wd],brkD[e][wd]+p.I]);for(const q of xbD[e][wd])if(q)busy.push([q.t,q.t+q.d]);
+        const lo=Math.max(X.ws,p.s+30),hi=Math.min(X.we,p.e-30)-X.dur;let bt=null,bv=Infinity;const mid=(X.ws+X.we-X.dur)/2;
+        for(let t=lo;t<=hi;t+=5){if(busy.some(([a,b])=>t<b+15&&a<t+X.dur+15))continue;xbD[e][wd][k]={t,d:X.dur};
+          let ovp=0;for(let o=0;o<c.N;o++){if(o===e)continue;const bs=[];if(brkD[o][wd]!=null&&p.I>0)bs.push([brkD[o][wd],brkD[o][wd]+p.I]);for(const q of xbD[o][wd])if(q)bs.push([q.t,q.t+q.d]);if(bs.some(([a,b])=>t<b&&a<t+X.dur))ovp++}
+          const v=defWd(wd)*1000+ovp*20+Math.abs(t-mid)/10;if(v<bv){bv=v;bt=t}}
+        if(bt==null){xbD[e][wd][k]=null;if(X.we>p.s+30&&X.ws<p.e-30)xNoFitD++}else xbD[e][wd][k]={t:bt,d:X.dur};
+      }}});
+  }
   let xNoFit=0;
-  c.extras.forEach((X,k)=>{
+  if(!dif)c.extras.forEach((X,k)=>{
     const order=[...Array(c.N).keys()].sort((x,y)=>sh[x].s-sh[y].s||x-y);
     for(const e of order){
       const busy=[];if(brk[e]!=null)busy.push([brk[e],brk[e]+I]);for(const p of xb[e])if(p)busy.push([p.t,p.t+p.d]);
@@ -430,17 +509,18 @@ function solve(c){
     }});
   const minDay=[],cntDay=[];
   for(let d=0;d<ND;d++){cntDay.push(R.reduce((a,row)=>a+(row[d]?1:0),0));
-    if(!isOpen(d)){minDay.push(null);continue}const v=covDay(d,all);minDay.push(L>0?Math.min(...v):0)}
+    if(!isOpen(d)){minDay.push(null);continue}const v=dif?covDayD(d):covDay(d,all);minDay.push(v.length?Math.min(...v):0)}
   const maxCons=Math.max(...R.map(maxc));
-  const hoursWeek=R.map(row=>{const h=[];for(let w=0;w<W;w++){let n=0;for(let d=0;d<7;d++)if(row[w*7+d])n++;h.push(n*D/60)}return h});
+  const hoursWeek=R.map(row=>{const h=[];for(let w=0;w<W;w++){let n=0;for(let d=0;d<7;d++)if(row[w*7+d])n+=dif?P[d].D:D;h.push(n/60)}return h});
   // checagens
   const chk=[];
   const short=minDay.filter(x=>x!==null&&x<c.minp).length;
   const perDay=r.reduce((a,b)=>a+b,0);
   const needN=Math.ceil(perDay*c.open.length/Math.max(1,Math.min(c.wd,c.open.length)));
-  if(short===0)chk.push(["ok",`Cobertura garantida: em todos os dias de funcionamento há pelo menos ${c.minp} ${c.minp>1?"pessoas":"pessoa"} no posto das ${hm(c.a)} às ${hm(c.b)}, inclusive nos intervalos.`]);
+  if(short===0)chk.push(["ok",`Cobertura garantida: em todos os dias de funcionamento há pelo menos ${c.minp} ${c.minp>1?"pessoas":"pessoa"} no posto ${dif?"durante todo o horário praticado em cada dia":`das ${hm(c.a)} às ${hm(c.b)}`}, inclusive nos intervalos.`]);
   else if(manual.some(Boolean))chk.push(["bad",`Com o intervalo ajustado manualmente, em ${short} ${short>1?"dias":"dia"} do ciclo o posto fica abaixo do mínimo, porque o intervalo coincide com o de outra pessoa escalada no mesmo dia. Mude o horário ou volte ao automático.`]);
   else chk.push(["bad",`Em ${short} ${short>1?"dias":"dia"} do ciclo a cobertura fica abaixo do mínimo em algum momento. Com esses parâmetros, a estimativa é de pelo menos ${Math.max(needN,c.N+1)} funcionários, ou libere mais dias de folga.${c.extras.length?" As pausas adicionais também pesam: tente ampliar a faixa de horário delas.":""}`]);
+  if(!dif){
   const comp=D>480?D-480:0;
   if(D>600)chk.push(["bad",`Jornada diária de ${dur(D)}: passa do limite de 10 horas (art. 59, §2º, CLT).`]);
   else if(comp)chk.push(["warn",`Jornada de ${dur(D)} por dia: são ${dur(comp)} diários além de 8 horas, compensados dentro da própria semana, que fecha em ${c.wh} horas com duas folgas, sem hora extra. Exige acordo de compensação por escrito, de preferência previsto em acordo ou convenção coletiva, como prevê a EC 141/2026 (art. 7º, XIII, CF; art. 59, §2º, CLT; Súmula 85 do TST). Sem esse acordo, os ${dur(comp)} diários são horas extras.`]);
@@ -457,6 +537,37 @@ function solve(c){
     else chk.push(["ok",`Intervalo de ${dur(c.I)}, dentro da faixa de 1 a 2 horas do art. 71 da CLT.${c.I>60?" Convém prever a duração no contrato de trabalho.":""}`]);
   } else if(D>240){chk.push(["ok","Jornada entre 4 e 6 horas: intervalo de 15 minutos (art. 71, §1º, CLT)."]);}
   else chk.push(["ok","Jornada de até 4 horas: sem intervalo obrigatório."]);
+  }
+  else{
+    const ds=c.open.filter(wd=>P[wd]),dtx=arr=>arr.map(wd=>DN[wd]).join(", ");
+    if(pbad.length)chk.push(["bad",`Horário inválido em ${dtx(pbad)}: a saída precisa ser depois da entrada.`]);
+    const grp=new Map();for(const wd of ds){const k=P[wd].D;if(!grp.has(k))grp.set(k,[]);grp.get(k).push(wd)}
+    const jtxt=[...grp.entries()].map(([D2,arr])=>`${dtx(arr)}: ${dur(D2)}`).join("; ");
+    const o10=ds.filter(wd=>P[wd].D>600),o8=ds.filter(wd=>P[wd].D>480&&P[wd].D<=600);
+    if(o10.length)chk.push(["bad",`Jornada acima de 10 horas em ${dtx(o10)} (art. 59, §2º, CLT).`]);
+    if(o8.length)chk.push(["warn",`Jornada acima de 8 horas em ${dtx(o8)}. O excedente só deixa de ser hora extra com acordo de compensação por escrito, de preferência previsto em acordo ou convenção coletiva, como prevê a EC 141/2026 (art. 7º, XIII, CF; art. 59, §2º, CLT; Súmula 85 do TST).`]);
+    if(!o10.length&&!o8.length)chk.push(["ok",`Jornada praticada por dia (${jtxt}), dentro do limite de 8 horas.`]);
+    const hw=hoursWeek.flat(),mx=Math.max(...hw),mn=Math.min(...hw);
+    if(mx>c.wh+1e-9)chk.push(["bad",`Em algumas semanas a carga chega a ${fmtH(mx)}, acima das ${c.wh}h do regime escolhido. O excedente é hora extra. Reduza o horário de algum dia ou escolha um regime com carga maior.`]);
+    else if(mn<mx-1e-9)chk.push(["ok",`A carga semanal varia de ${fmtH(mn)} a ${fmtH(mx)}, conforme os dias trabalhados em cada semana, sem passar das ${c.wh}h do regime. Semanas com menos horas não autorizam desconto no salário contratado.`]);
+    else if(mx<c.wh-1e-9)chk.push(["ok",`Carga de ${fmtH(mx)} em todas as semanas, abaixo das ${c.wh}h do regime. Se o contrato prevê ${c.wh}h, a jornada menor não autoriza desconto no salário.`]);
+    else chk.push(["ok",`Carga de ${fmtH(mx)} em todas as semanas, igual às ${c.wh}h do regime.`]);
+    if(mx>=44-1e-9)chk.push(["bad","Carga de 44 horas semanais: pela EC 141/2026, o limite cai para 42 horas a partir de 16/12/2026 e para 40 horas a partir de 16/12/2027."]);
+    else if(mx>40+1e-9)chk.push(["warn",`Semanas de até ${fmtH(mx)}: permitidas na fase de transição da EC 141/2026, de 16/12/2026 a 15/12/2027. A partir de 16/12/2027 o limite é de 40 horas, sem redução do salário.`]);
+    else chk.push(["ok",`Nenhuma semana passa de 40 horas, o limite final da EC 141/2026.`]);
+    const ivp=[];
+    for(const wd of ds){const p=P[wd];
+      if(p.D>360){if(!p.I)ivp.push(["bad",`${DNF[wd]}: jornada de ${dur(p.D)} sem intervalo. Acima de 6 horas, o intervalo mínimo é de 1 hora (art. 71, CLT).`]);
+        else if(p.I<60)ivp.push(["warn",`${DNF[wd]}: intervalo de ${p.I} minutos para jornada acima de 6 horas. Abaixo de 1 hora, só por convenção ou acordo coletivo, respeitado o mínimo de 30 minutos (art. 611-A, III, CLT).`]);
+        else if(p.I>120)ivp.push(["warn",`${DNF[wd]}: intervalo acima de 2 horas exige acordo escrito ou norma coletiva (art. 71, CLT).`]);}
+      else if(p.D>240&&p.I<15)ivp.push(["bad",`${DNF[wd]}: jornada de ${dur(p.D)} sem os 15 minutos de intervalo exigidos para mais de 4 horas (art. 71, §1º, CLT).`]);}
+    if(ivp.length)chk.push(...ivp);else chk.push(["ok","Intervalos de todos os dias dentro do art. 71 da CLT. Até 4 horas de jornada não há intervalo obrigatório; de 4 a 6 horas são 15 minutos; acima de 6 horas, de 1 a 2 horas."]);
+    const lg=[];for(const wd of ds){const p=P[wd];if(p.D<=360||!p.I)continue;for(let e=0;e<c.N;e++){const bb=brkD[e][wd];if(bb==null)continue;if(bb-p.s>360||p.e-(bb+p.I)>360){lg.push(wd);break}}}
+    if(lg.length)chk.push(["bad",`Em ${dtx(lg)} alguém trabalha mais de 6 horas seguidas sem intervalo. Pelo art. 71 da CLT, o intervalo deve vir antes de completar 6 horas.`]);
+    if(ds.some(wd=>P[wd].e>1320||P[wd].s<300))chk.push(["warn","Parte da jornada cai entre 22h e 5h: há adicional noturno e hora noturna reduzida (art. 73, CLT)."]);
+    const ij=[];for(const wd of ds){const nx=(wd+1)%7;if(!P[nx])continue;const rest=1440-P[wd].e+P[nx].s;if(rest<660)ij.push(`${DN[wd]} para ${DN[nx]} (${dur(rest)})`)}
+    if(ij.length)chk.push(["bad",`Descanso entre jornadas abaixo de 11 horas: ${ij.join("; ")} (art. 66, CLT).`]);
+  }
   chk.push(maxCons<=6?["ok",`Ninguém trabalha mais de ${maxCons} dias seguidos. O descanso semanal ocorre dentro de cada período de 7 dias (OJ 410 da SDI-1 do TST).`]:["bad",`Há sequência de ${maxCons} dias de trabalho: o repouso semanal não pode passar do sétimo dia (OJ 410 da SDI-1 do TST).`]);
   if(sunOpen){
     const nf=fem.filter(Boolean).length,nm=c.N-nf;
@@ -467,14 +578,14 @@ function solve(c){
   }
   if(c.extras.length){const tot=c.extras.reduce((a,x)=>a+x.dur,0);
     chk.push(["ok",`Pausas adicionais de ${dur(tot)} por dia: por não estarem previstas em lei, contam como tempo de serviço (Súmula 118 do TST). Ficam dentro da jornada, sem desconto e sem mudar entrada e saída. Se forem somadas ao fim do expediente, o tempo acrescido é hora extra.`]);
-    if(xNoFit)chk.push(["warn",`Em ${xNoFit} ${xNoFit>1?"casos":"caso"} a pausa adicional não coube na faixa de horário informada, por estar fora do turno ou colada no intervalo. Amplie a faixa de horário.`]);}
-  if(sh.some(x=>x.e>1320||x.s<300))chk.push(["warn","Parte da jornada cai entre 22h e 5h: há adicional noturno e hora noturna reduzida (art. 73, CLT)."]);
-  if(S>780)chk.push(["bad","O intervalo entre uma jornada e outra fica abaixo de 11 horas (art. 66, CLT)."]);
+    if(dif?xNoFitD:xNoFit)chk.push(["warn",`Em ${dif?xNoFitD:xNoFit} ${(dif?xNoFitD:xNoFit)>1?"casos":"caso"} a pausa adicional não coube na faixa de horário informada, por estar fora do turno ou colada no intervalo. Amplie a faixa de horário.`]);}
+  if(!dif&&sh.some(x=>x.e>1320||x.s<300))chk.push(["warn","Parte da jornada cai entre 22h e 5h: há adicional noturno e hora noturna reduzida (art. 73, CLT)."]);
+  if(!dif&&S>780)chk.push(["bad","O intervalo entre uma jornada e outra fica abaixo de 11 horas (art. 66, CLT)."]);
   const extras=choice.reduce((a,ch,e)=>a+ch.reduce((b,x,w)=>b+opts[e][w][x].x,0),0);
   if(extras)chk.push(["warn",`Para que ninguém passe de 6 dias seguidos com o revezamento de domingos, ${extras} ${extras>1?"semanas do ciclo têm":"semana do ciclo tem"} uma folga a mais. Nessas semanas a carga fica abaixo de ${c.wh}h, sem prejuízo do salário contratado.`]);
   if(shortAllowed)chk.push(["warn","Os dias de folga marcados não bastam para dar todas as folgas da semana. A escala usou outros dias em que a empresa abre."]);
   if(fewerDays)chk.push(["warn",`A empresa fecha mais dias do que as folgas do regime ${c.wd===5?"5x2":"6x1"}. Nesses casos a semana tem menos dias de trabalho e menos horas.`]);
-  return {manual,xb,xNoFit,sunOpen,per,fem,D,I,S,L,m,starts,types,sh,brk,R,W,ND,isOpen,minDay,cntDay,hoursWeek,chk,maxCons};
+  return {dif,P,brkD,xbD,manual,xb,xNoFit,sunOpen,per,fem,D,I,S,L,m,starts,types,sh,brk,R,W,ND,isOpen,minDay,cntDay,hoursWeek,chk,maxCons};
 }
 
 let last=null,lastC=null,curWk=0;
@@ -487,7 +598,7 @@ function render(){
   const status=s.chk.some(x=>x[0]==="bad")?["bad","Precisa de ajuste"]:s.chk.some(x=>x[0]==="warn")?["warn","Válida, com pontos de atenção"]:["ok","Escala dentro das regras"];
   let h=`<div class="panel"><div class="headline"><h2>${esc(c.cargo)}</h2><span class="chip ${status[0]}">${status[1]}</span></div>
   ${c.funcao?`<p class="hint" style="margin:4px 0 10px;font-size:13px">${esc(c.funcao)}${c.empresa?" | "+esc(c.empresa):""}</p>`:(c.empresa?`<p class="hint">${esc(c.empresa)}</p>`:"")}
-  <div class="facts"><span><b>${c.N}</b> funcionários</span><span>Regime <b>${c.wd===5?"5x2":"6x1"}, ${c.wh}h</b></span><span>Jornada <b>${dur(s.D)}</b> por dia</span><span>Intervalo <b>${s.I?dur(s.I):"sem"}</b></span><span>Cobertura <b>${hm(c.a)} às ${hm(c.b)}</b></span><span>Ciclo de <b>${s.W} semanas</b></span></div></div>`;
+  <div class="facts"><span><b>${c.N}</b> funcionários</span><span>Regime <b>${c.wd===5?"5x2":"6x1"}, ${s.dif?"até ":""}${c.wh}h</b></span>${s.dif?`<span>Jornada <b>diferenciada por dia</b></span>`:`<span>Jornada <b>${dur(s.D)}</b> por dia</span><span>Intervalo <b>${s.I?dur(s.I):"sem"}</b></span><span>Cobertura <b>${hm(c.a)} às ${hm(c.b)}</b></span>`}<span>Ciclo de <b>${s.W} semanas</b></span></div></div>`;
   // grade
   h+=`<div><div class="wtabs no-print" role="tablist" aria-label="Semana exibida">${[...Array(s.W).keys()].map(w=>`<button type="button" role="tab" class="wtab" data-w="${w}" aria-selected="${w===curWk}">Semana ${w+1}</button>`).join("")}</div><div class="scroll"><table class="esc" data-wk="${curWk}"><thead><tr><th class="nm" rowspan="2" style="vertical-align:bottom">Funcionário</th>`;
   for(let w=0;w<s.W;w++)h+=`<th colspan="7" class="wk k${w}">Semana ${w+1}</th>`;
@@ -507,9 +618,23 @@ function render(){
   h+=`<td></td></tr></tfoot></table></div>
   <div class="legend" style="margin-top:8px"><span><span class="sw" style="background:var(--surface)"></span>${s.m>1?"Letra = turno do dia":"T = trabalho"}</span><span><span class="sw" style="background:var(--sand-soft)"></span>F = folga</span><span><span class="sw" style="background:var(--soft)"></span>Empresa fechada ou domingo</span><span>A escala se repete a cada ${s.W} semanas.</span></div></div>`;
   // horários + checagens
+  if(!s.dif){
   h+=`<div class="two"><div class="panel"><h3>Horários</h3>${s.I>0?'<p class="hint no-print" style="margin:-2px 0 8px">Use − e + para adiantar ou atrasar o intervalo em 10 minutos.</p>':""}<div style="overflow-x:auto"><table class="hor"><thead><tr><th>Funcionário</th>${s.m>1?"<th>Turno</th>":""}<th>Entrada</th><th>Intervalo</th>${c.extras.length?"<th>Pausas</th>":""}<th>Saída</th>${s.sunOpen?"<th>Domingo de folga</th>":""}</tr></thead><tbody>`;
   for(let e=0;e<c.N;e++){const x=s.sh[e];h+=`<tr><td class="hn">${esc(name(c,e))}</td>${s.m>1?`<td class="t" data-l="Turno">${letters[s.types[e]]}</td>`:""}<td data-l="Entrada">${hm(x.s)}</td><td class="hiv" data-l="Intervalo">${s.brk[e]!=null?`<div class="ivc"><span class="ivg"><button type="button" class="ivb no-print" data-e="${e}" data-d="-10" aria-label="Adiantar o intervalo de ${esc(name(c,e))} em 10 minutos" title="10 minutos mais cedo">−</button><span class="ivt${s.manual[e]?" man":""}">${hm(s.brk[e])} às ${hm(s.brk[e]+s.I)}</span><button type="button" class="ivb no-print" data-e="${e}" data-d="10" aria-label="Atrasar o intervalo de ${esc(name(c,e))} em 10 minutos" title="10 minutos mais tarde">+</button></span>${s.manual[e]?`<button type="button" class="ivr no-print" data-e="${e}">voltar ao automático</button>`:""}</div>`:"Sem intervalo"}</td>${c.extras.length?`<td class="hiv" data-l="Pausas">${xtxt(s,e)}</td>`:""}<td data-l="Saída">${hm(x.e)}</td>${s.sunOpen?`<td class="hiv" data-l="Domingo de folga">${s.per[e]===2?"A cada 2 semanas":s.per[e]===3?"A cada 3 semanas":"A cada 4 semanas"}${s.fem[e]?" (mulher)":""}</td>`:""}</tr>`}
-  h+=`</tbody></table></div></div><div class="panel"><h3>Conferência legal</h3><ul class="checks">${s.chk.map(x=>`<li class="${x[0]}">${x[1]}</li>`).join("")}</ul></div></div>`;
+  h+=`</tbody></table></div></div>`;
+  }else{
+    const dsO=c.open.filter(wd=>s.P[wd]);
+    h+=`<div class="two"><div class="panel"><h3>Horário praticado</h3><div style="overflow-x:auto"><table class="hor hd"><thead><tr><th>Dia</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Jornada</th></tr></thead><tbody>`;
+    for(const wd of dsO){const p=s.P[wd];h+=`<tr><td class="hn">${DNF[wd]}</td><td data-l="Entrada">${hm(p.s)}</td><td data-l="Intervalo">${p.I?dur(p.I):"Sem"}</td><td data-l="Saída">${hm(p.e)}</td><td data-l="Jornada">${dur(p.D)}</td></tr>`}
+    h+=`</tbody></table></div>`;
+    const ivDays=dsO.filter(wd=>s.P[wd].I>0||c.extras.length);
+    if(ivDays.length||s.sunOpen){
+      h+=`<h3 style="margin-top:18px">${ivDays.length?"Intervalos por funcionário":"Folga aos domingos"}</h3>${ivDays.length?'<p class="hint" style="margin:-2px 0 8px">Os intervalos de cada dia são distribuídos automaticamente para o posto não ficar vazio.</p>':""}<div style="overflow-x:auto"><table class="hor hd"><thead><tr><th>Funcionário</th>${ivDays.map(wd=>`<th>${DN[wd]}</th>`).join("")}${s.sunOpen?"<th>Domingo de folga</th>":""}</tr></thead><tbody>`;
+      for(let e=0;e<c.N;e++)h+=`<tr><td class="hn">${esc(name(c,e))}</td>${ivDays.map(wd=>`<td data-l="${DN[wd]}">${ivTxt(s,e,wd)}</td>`).join("")}${s.sunOpen?`<td class="hiv" data-l="Domingo de folga">A cada ${s.per[e]} semanas${s.fem[e]?" (mulher)":""}</td>`:""}</tr>`;
+      h+=`</tbody></table></div>`}
+    h+=`</div>`;
+  }
+  h+=`<div class="panel"><h3>Conferência legal</h3><ul class="checks">${s.chk.map(x=>`<li class="${x[0]}">${x[1]}</li>`).join("")}</ul></div></div>`;
 
   $("out").innerHTML=h;
 
@@ -540,7 +665,7 @@ async function exportPDF(){
   doc.setFont("helvetica","bold");doc.setFontSize(17);doc.setTextColor(...NAVY);doc.text(c.cargo,M,y);
   y+=5.5;doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(...GR);
   if(c.funcao){doc.text(doc.splitTextToSize(c.funcao,PW-2*M),M,y);y+=4.5}
-  const facts=`${c.N} funcionários   |   Regime ${c.wd===5?"5x2":"6x1"}, ${c.wh}h semanais   |   Jornada ${dur(s.D)} por dia   |   Intervalo ${s.I?dur(s.I):"sem intervalo"}   |   Cobertura ${hm(c.a)} às ${hm(c.b)}   |   Ciclo de ${s.W} semanas`;
+  const facts=s.dif?`${c.N} funcionários   |   Regime ${c.wd===5?"5x2":"6x1"}, até ${c.wh}h semanais   |   Jornada diferenciada por dia   |   Ciclo de ${s.W} semanas`:`${c.N} funcionários   |   Regime ${c.wd===5?"5x2":"6x1"}, ${c.wh}h semanais   |   Jornada ${dur(s.D)} por dia   |   Intervalo ${s.I?dur(s.I):"sem intervalo"}   |   Cobertura ${hm(c.a)} às ${hm(c.b)}   |   Ciclo de ${s.W} semanas`;
   doc.setTextColor(35,40,63);doc.text(facts,M,y);y+=4;
   // grade
   const head1=[{content:"Funcionário",rowSpan:2,styles:{valign:"bottom",halign:"left"}}];
@@ -552,14 +677,14 @@ async function exportPDF(){
     for(let d=0;d<s.ND;d++){if(!s.isOpen(d))row.push({content:"F",styles:{fillColor:SOFT,textColor:GR}});
       else if(s.R[e][d])row.push({content:s.m>1?letters[s.types[e]]:"T",styles:{textColor:NAVY,fontStyle:"bold",fillColor:d%7===6?SOFT:[255,255,255]}});
       else row.push({content:"F",styles:{fillColor:SANDS,textColor:SANDI}});}
-    const hw=s.hoursWeek[e];row.push(hw.every(x=>x===hw[0])?fmtH(hw[0])+"/sem":hw.map(fmtH).join(" | "));body.push(row)}
+    const hw=s.hoursWeek[e];row.push(hw.every(x=>x===hw[0])?fmtH(hw[0])+"/sem":hw.map(x=>fmtH(x).replace(/h$/,"")).join("/")+"h");body.push(row)}
   const foot=[["Escalados no dia"].concat([...Array(s.ND).keys()].map(d=>s.isOpen(d)?String(s.cntDay[d]):"")).concat([""]),
               ["Mínimo no posto"].concat([...Array(s.ND).keys()].map(d=>{const v=s.minDay[d];return v===null?"":{content:String(v),styles:v<c.minp?{textColor:[179,38,30],fontStyle:"bold"}:{}}})).concat([""])];
-  const hrsW=s.hoursWeek.some(h=>!h.every(x=>x===h[0]))?40:20, nameW=32, dayW=(PW-2*M-nameW-hrsW)/s.ND;
+  const hrsW=s.hoursWeek.some(h=>!h.every(x=>x===h[0]))?(s.W>4?32:24):18, nameW=30, dayW=(PW-2*M-nameW-hrsW)/s.ND, tight=dayW<8.6;
   const cs={0:{cellWidth:nameW,halign:"left"}};for(let d=1;d<=s.ND;d++)cs[d]={cellWidth:dayW};cs[s.ND+1]={cellWidth:hrsW};
   doc.autoTable({startY:y+1,head:[head1,head2],body,foot,theme:"plain",margin:{left:M,right:M,top:26,bottom:14},
     styles:{font:"helvetica",fontSize:s.ND>28?6:7.5,halign:"center",valign:"middle",cellPadding:1.2,lineColor:LN,lineWidth:{bottom:.2}},
-    headStyles:{textColor:GR,fontStyle:"bold",fontSize:s.ND>28?5.2:6.8},footStyles:{textColor:GR,fontStyle:"normal",fontSize:7},
+    headStyles:{textColor:GR,fontStyle:"bold",fontSize:s.ND>28?5.2:(tight?6:6.8),cellPadding:tight?{top:1.2,bottom:1.2,left:.4,right:.4}:1.2},footStyles:{textColor:GR,fontStyle:"normal",fontSize:7},
     columnStyles:cs,didParseCell:h=>{if(h.section==="head"&&h.row.index===0&&h.column.index>0&&h.cell.colSpan===7){h.cell.styles.textColor=NAVY;h.cell.styles.fontSize=9}
       if(h.section==="foot"&&h.column.index===0)h.cell.styles.halign="left";
       if(h.section==="body"&&h.column.index===0){h.cell.styles.fontStyle="bold";h.cell.styles.textColor=[35,40,63]}},
@@ -571,13 +696,28 @@ async function exportPDF(){
   // horários (esquerda) e conferência (direita)
   if(y>PH-60){doc.addPage();chrome();y=30}
   const colW=128;
-  doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...NAVY);doc.text("Horários",M,y);doc.text("Conferência legal",M+colW+12,y);
-  const hb=[];for(let e=0;e<c.N;e++){const x=s.sh[e];hb.push([name(c,e)].concat(s.m>1?[letters[s.types[e]]]:[]).concat([hm(x.s),s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo"]).concat(c.extras.length?[xtxt(s,e)]:[]).concat([hm(x.e)]).concat(s.sunOpen?["A cada "+s.per[e]+" sem."+(s.fem[e]?" (mulher)":"")]:[]))}
+  doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...NAVY);doc.text(s.dif?"Horário praticado":"Horários",M,y);doc.text("Conferência legal",M+colW+12,y);
   const startPage=doc.internal.getCurrentPageInfo().pageNumber;
+  const tStyle={font:"helvetica",fontSize:8,cellPadding:1.6,lineColor:LN,lineWidth:{bottom:.2},textColor:[35,40,63]};
+  const hStyle={textColor:GR,fontSize:7,lineColor:NAVY,lineWidth:{bottom:.5}};
+  const dPage=()=>{if(doc.internal.getCurrentPageInfo().pageNumber>startPage)chrome()};
+  if(!s.dif){
+  const hb=[];for(let e=0;e<c.N;e++){const x=s.sh[e];hb.push([name(c,e)].concat(s.m>1?[letters[s.types[e]]]:[]).concat([hm(x.s),s.brk[e]!=null?hm(s.brk[e])+" às "+hm(s.brk[e]+s.I):"Sem intervalo"]).concat(c.extras.length?[xtxt(s,e)]:[]).concat([hm(x.e)]).concat(s.sunOpen?["A cada "+s.per[e]+" sem."+(s.fem[e]?" (mulher)":"")]:[]))}
   doc.autoTable({startY:y+2,head:[["Funcionário"].concat(s.m>1?["Turno"]:[]).concat(["Entrada","Intervalo"]).concat(c.extras.length?["Pausas"]:[]).concat(["Saída"]).concat(s.sunOpen?["Domingo de folga"]:[])],body:hb,theme:"plain",
     margin:{left:M,right:PW-M-colW,top:26,bottom:14},tableWidth:colW,
     styles:{font:"helvetica",fontSize:8,cellPadding:1.6,lineColor:LN,lineWidth:{bottom:.2},textColor:[35,40,63]},
     headStyles:{textColor:GR,fontSize:7,lineColor:NAVY,lineWidth:{bottom:.5}},didDrawPage:()=>{if(doc.internal.getCurrentPageInfo().pageNumber>startPage)chrome()}});
+  }else{
+    const dsO=c.open.filter(wd=>s.P[wd]);
+    doc.autoTable({startY:y+2,head:[["Dia","Entrada","Intervalo","Saída","Jornada"]],body:dsO.map(wd=>{const p=s.P[wd];return [DNF[wd],hm(p.s),p.I?dur(p.I):"Sem",hm(p.e),dur(p.D)]}),theme:"plain",
+      margin:{left:M,right:PW-M-colW,top:26,bottom:14},tableWidth:colW,styles:tStyle,headStyles:hStyle,didDrawPage:dPage});
+    const ivDays=dsO.filter(wd=>s.P[wd].I>0||c.extras.length);
+    if(ivDays.length||s.sunOpen){let y2=doc.lastAutoTable.finalY+7;if(y2>PH-30){doc.addPage();chrome();y2=30}
+      doc.setFont("helvetica","bold");doc.setFontSize(9.5);doc.setTextColor(...NAVY);doc.text(ivDays.length?"Intervalos por funcionário":"Folga aos domingos",M,y2);
+      doc.autoTable({startY:y2+2,head:[["Funcionário"].concat(ivDays.map(wd=>DN[wd])).concat(s.sunOpen?["Domingo de folga"]:[])],
+        body:[...Array(c.N).keys()].map(e=>[name(c,e)].concat(ivDays.map(wd=>ivTxt(s,e,wd).replace(/ às /g,"-"))).concat(s.sunOpen?["A cada "+s.per[e]+" sem."+(s.fem[e]?" (mulher)":"")]:[])),theme:"plain",
+        margin:{left:M,right:PW-M-colW,top:26,bottom:14},tableWidth:colW,styles:Object.assign({},tStyle,{fontSize:ivDays.length>5?6.6:7.4,cellPadding:1.3}),headStyles:hStyle,didDrawPage:dPage});}
+  }
   const endPage=doc.internal.getCurrentPageInfo().pageNumber;
   doc.setPage(startPage);
   let ry=y+6;const rx=M+colW+12,rw=PW-M-rx;
@@ -597,20 +737,33 @@ async function exportPDF(){
   if(dl){try{await dl.save({filename:fname,data:blob});t.textContent="PDF pronto."}catch(e){t.textContent=e&&e.code==="declined"?"Download cancelado.":"Não foi possível salvar o PDF aqui."}}
   else{doc.save(fname);t.textContent="PDF baixado."}
 }
+function ivTxt(s,e,wd){let wk=false;for(let d=wd;d<s.ND;d+=7)if(s.R[e][d])wk=true;if(!wk)return "Folga";
+  const p=s.P[wd],parts=[],b=s.brkD[e][wd];if(b!=null&&p.I>0)parts.push(hm(b)+" às "+hm(b+p.I));
+  for(const q of s.xbD[e][wd]||[])if(q)parts.push(hm(q.t)+" às "+hm(q.t+q.d));return parts.join(", ")||"Sem intervalo"}
 function xtxt(s,e){return s.xb[e].map(p=>p?hm(p.t)+" às "+hm(p.t+p.d):"não coube").join(", ")||""}
 function fmtH(x){const m=Math.round(x*60),h=Math.floor(m/60),mi=m%60;return h+"h"+(mi?String(mi).padStart(2,"0"):"")}
 function esc(t){return t.replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]))}
 function copyTSV(){
   const c=lastC,s=last;const rows=[];
+  if(s.dif){const dsO=c.open.filter(wd=>s.P[wd]);
+    rows.push(["Funcionário"].concat([...Array(s.ND).keys()].map(d=>`S${Math.floor(d/7)+1} ${DN[d%7]}`)));
+    for(let e=0;e<c.N;e++)rows.push([name(c,e)].concat(s.R[e].map((w,d)=>!s.isOpen(d)?"F":w?"T":"F")));
+    rows.push([]);rows.push(["Dia","Entrada","Intervalo","Saída","Jornada"]);
+    for(const wd of dsO){const p=s.P[wd];rows.push([DNF[wd],hm(p.s),p.I?dur(p.I):"Sem",hm(p.e),dur(p.D)])}
+    rows.push([]);rows.push(["Intervalos"].concat(dsO.map(wd=>DN[wd])));
+    for(let e=0;e<c.N;e++)rows.push([name(c,e)].concat(dsO.map(wd=>ivTxt(s,e,wd))));
+  }else{
   rows.push(["Funcionário","Entrada","Intervalo","Pausas","Saída"].concat([...Array(s.ND).keys()].map(d=>`S${Math.floor(d/7)+1} ${DN[d%7]}`)));
   for(let e=0;e<c.N;e++){const x=s.sh[e];rows.push([name(c,e),hm(x.s),s.brk[e]!=null?hm(s.brk[e])+"-"+hm(s.brk[e]+s.I):"",xtxt(s,e),hm(x.e)].concat(s.R[e].map((w,d)=>!s.isOpen(d)?"F":w?(s.m>1?"ABCDEFGH"[s.types[e]]:"T"):"F")))}
+  }
   const txt=rows.map(r=>r.join("\t")).join("\n");const t=$("toast");
   const fb=()=>{const ta=document.createElement("textarea");ta.value=txt;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");t.textContent="Copiado. Cole no Excel."}catch(e){t.textContent="Não foi possível copiar."}ta.remove()};
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(()=>{t.textContent="Copiado. Cole no Excel ou no Google Planilhas."},fb);else fb();
 }
 let touched=false;
+$("f").addEventListener("input",e=>{if(e.target.closest(".djrow"))djJ()});
 $("f").addEventListener("submit",e=>{e.preventDefault();render()});
-$("f").addEventListener("change",e=>{if(e.target.id.startsWith("open"))syncOff();if(!touched){touched=true;$("exBox").hidden=true}render()});
+$("f").addEventListener("change",e=>{if(e.target.id.startsWith("open")){syncOff();syncDJ()}if(e.target.id==="jmode")syncDJ();djJ();if(!touched){touched=true;$("exBox").hidden=true}render()});
 $("again").onclick=()=>{seed=(seed*7919+13)%100003;render()};
 function addExtra(d,ws,we){const box=$("extras");if(box.children.length>=3)return;const i=Date.now()%100000+box.children.length;
   const r=document.createElement("div");r.className="xrow";
@@ -626,6 +779,6 @@ $("out").addEventListener("click",ev=>{const t=ev.target.closest(".wtab");if(t){
   if(b.classList.contains("ivr"))delete brkOv.v[e];else brkOv.v[e]=(brkOv.v[e]!=null?brkOv.v[e]:last.brk[e])+(+b.dataset.d);
   render();const nb=document.querySelector(`.${b.classList.contains("ivr")?"ivb":"ivb"}[data-e="${e}"][data-d="${b.dataset.d||10}"]`);if(nb)nb.focus()});
 $("copy").onclick=copyTSV;$("pdf").onclick=exportPDF;
-syncOff();render();
+syncOff();syncDJ();render();
 })();
 </script>
